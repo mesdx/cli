@@ -7,7 +7,7 @@ import (
 
 // Version is the version of codeintelx CLI.
 // Update this constant manually on every release.
-const Version = "v0.1.1"
+const Version = "v0.1.2"
 
 // NewRootCmd creates the root command for codeintelx
 func NewRootCmd() *cobra.Command {
