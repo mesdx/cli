@@ -11,6 +11,7 @@ import (
 	"github.com/codeintelx/cli/internal/config"
 	"github.com/codeintelx/cli/internal/db"
 	"github.com/codeintelx/cli/internal/ignore"
+	"github.com/codeintelx/cli/internal/indexer"
 	"github.com/codeintelx/cli/internal/repo"
 	"github.com/spf13/cobra"
 )
@@ -39,12 +40,6 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	cmd.Printf("%s Initializing codeintelx in: %s\n", infoStyle.Render("→"), repoRoot)
-
-	// Ensure .codeintelx directory exists
-	codeintelxDir := repo.CodeintelxDir(repoRoot)
-	if err := os.MkdirAll(codeintelxDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .codeintelx directory: %w", err)
-	}
 
 	// Discover all directories recursively for selection
 	allDirs, err := repo.DiscoverAllDirs(repoRoot)
@@ -96,6 +91,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
+	// Remove existing .codeintelx directory and recreate (bulk replace)
+	codeintelxDir := repo.CodeintelxDir(repoRoot)
+	if err := os.RemoveAll(codeintelxDir); err != nil {
+		return fmt.Errorf("failed to remove existing .codeintelx directory: %w", err)
+	}
+	if err := os.MkdirAll(codeintelxDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .codeintelx directory: %w", err)
+	}
+
 	// Save config
 	cfg := &config.Config{
 		RepoRoot:    repoRoot,
@@ -114,6 +118,27 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	cmd.Printf("%s Database initialized at: %s\n", successStyle.Render("✓"), dbPath)
+
+	// Run bulk indexing on files
+	cmd.Printf("%s Indexing source files...\n", infoStyle.Render("→"))
+
+	d, err := db.Open(dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer d.Close()
+
+	idx := indexer.New(d, repoRoot)
+	stats, err := idx.FullIndex(selectedDirs)
+	if err != nil {
+		return fmt.Errorf("failed to index: %w", err)
+	}
+
+	cmd.Printf("%s Indexed %d files (%d symbols, %d references)\n",
+		successStyle.Render("✓"), stats.Indexed, stats.Symbols, stats.Refs)
+	if stats.Errors > 0 {
+		cmd.Printf("%s %d files had errors during indexing\n", infoStyle.Render("!"), stats.Errors)
+	}
 
 	// Handle .gitignore and .dockerignore prompts
 	if err := ignore.HandleIgnoreFiles(repoRoot, cmd); err != nil {
