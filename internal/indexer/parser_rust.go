@@ -52,13 +52,14 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 			kind = symbols.KindMethod
 			container = ib.typeName
 		}
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:          name,
 			Kind:          kind,
 			ContainerName: container,
 			StartLine:     line,
 			StartCol:      col,
-			EndLine:       line,
+			EndLine:       endLine,
 			EndCol:        col + len(name),
 		})
 	}
@@ -72,12 +73,13 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindStruct,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -91,12 +93,13 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindEnum,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -110,12 +113,13 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindTrait,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -132,12 +136,13 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		}
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindConstant,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -151,12 +156,13 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindTypeAlias,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -170,12 +176,13 @@ func (p *RustParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindModule,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}

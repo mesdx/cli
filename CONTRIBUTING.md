@@ -90,15 +90,4 @@ SQLite database is stored at `.codeintelx/index.db` using the pure-Go driver (no
 
 ### MCP Server
 
-The MCP server runs over stdio transport and exposes tools for code intelligence queries. Currently implements a stub `codeintelx.projectInfo` tool.
-
-## Future Work
-
-- File-hash based incremental indexing
-- Language-aware code parsing (Go, TypeScript, JavaScript, etc.)
-- Dependency graph extraction and storage
-- Additional MCP tools for symbol search, call graph queries, etc.
-
-## Questions?
-
-If you have questions or need help, please open an issue on the repository.
+The MCP server runs over stdio transport and exposes tools for code intelligence queries.

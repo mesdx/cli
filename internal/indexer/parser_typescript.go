@@ -42,12 +42,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
 		currentClass = name
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindClass,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -61,12 +62,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindInterface,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -80,12 +82,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindTypeAlias,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -99,12 +102,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindEnum,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -121,12 +125,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		}
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindFunction,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -144,12 +149,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
 		arrowNames[name] = true
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindFunction,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -165,13 +171,14 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 			if name == "constructor" {
 				line := lineAt(content, m[0])
 				col := colAt(content, m[0], name)
+				endLine := findBlockEndLine(lines, line)
 				result.Symbols = append(result.Symbols, symbols.Symbol{
 					Name:          name,
 					Kind:          symbols.KindConstructor,
 					ContainerName: currentClass,
 					StartLine:     line,
 					StartCol:      col,
-					EndLine:       line,
+					EndLine:       endLine,
 					EndCol:        col + len(name),
 				})
 			}
@@ -179,13 +186,14 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		}
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:          name,
 			Kind:          symbols.KindMethod,
 			ContainerName: currentClass,
 			StartLine:     line,
 			StartCol:      col,
-			EndLine:       line,
+			EndLine:       endLine,
 			EndCol:        col + len(name),
 		})
 	}
@@ -202,12 +210,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		}
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindVariable,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -221,12 +230,13 @@ func (p *TypeScriptParser) Parse(filename string, src []byte) (*symbols.FileResu
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindModule,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}

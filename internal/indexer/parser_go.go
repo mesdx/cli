@@ -53,7 +53,12 @@ func (p *GoParser) Parse(filename string, src []byte) (*symbols.FileResult, erro
 				sig = funcSignature(fset, decl)
 			}
 			pos := fset.Position(decl.Name.Pos())
-			endPos := fset.Position(decl.Name.End())
+			// EndLine = end of body (or end of signature if no body)
+			declEnd := decl.End()
+			if decl.Body != nil {
+				declEnd = decl.Body.End()
+			}
+			endPos := fset.Position(declEnd)
 			result.Symbols = append(result.Symbols, symbols.Symbol{
 				Name:          decl.Name.Name,
 				Kind:          kind,
@@ -62,7 +67,7 @@ func (p *GoParser) Parse(filename string, src []byte) (*symbols.FileResult, erro
 				StartLine:     pos.Line,
 				StartCol:      pos.Column - 1,
 				EndLine:       endPos.Line,
-				EndCol:        endPos.Column - 1,
+				EndCol:        pos.Column - 1 + len(decl.Name.Name),
 			})
 
 		case *ast.GenDecl:
@@ -77,17 +82,18 @@ func (p *GoParser) Parse(filename string, src []byte) (*symbols.FileResult, erro
 						kind = symbols.KindInterface
 					}
 					pos := fset.Position(s.Name.Pos())
-					endPos := fset.Position(s.Name.End())
+					// EndLine = end of the full type (struct body, interface body, etc.)
+					endPos := fset.Position(s.End())
 					result.Symbols = append(result.Symbols, symbols.Symbol{
 						Name:      s.Name.Name,
 						Kind:      kind,
 						StartLine: pos.Line,
 						StartCol:  pos.Column - 1,
 						EndLine:   endPos.Line,
-						EndCol:    endPos.Column - 1,
+						EndCol:    pos.Column - 1 + len(s.Name.Name),
 					})
 
-					// If struct, extract fields
+					// If struct, extract fields (keep identifier-only spans)
 					if st, ok := s.Type.(*ast.StructType); ok && st.Fields != nil {
 						for _, field := range st.Fields.List {
 							for _, name := range field.Names {
@@ -106,7 +112,7 @@ func (p *GoParser) Parse(filename string, src []byte) (*symbols.FileResult, erro
 						}
 					}
 
-					// If interface, extract methods
+					// If interface, extract methods (keep identifier-only spans)
 					if it, ok := s.Type.(*ast.InterfaceType); ok && it.Methods != nil {
 						for _, method := range it.Methods.List {
 							for _, name := range method.Names {
@@ -130,19 +136,20 @@ func (p *GoParser) Parse(filename string, src []byte) (*symbols.FileResult, erro
 					if decl.Tok == token.CONST {
 						kind = symbols.KindConstant
 					}
+					// EndLine = end of the full value spec
+					specEnd := fset.Position(s.End())
 					for _, name := range s.Names {
 						if name.Name == "_" {
 							continue
 						}
 						pos := fset.Position(name.Pos())
-						endPos := fset.Position(name.End())
 						result.Symbols = append(result.Symbols, symbols.Symbol{
 							Name:      name.Name,
 							Kind:      kind,
 							StartLine: pos.Line,
 							StartCol:  pos.Column - 1,
-							EndLine:   endPos.Line,
-							EndCol:    endPos.Column - 1,
+							EndLine:   specEnd.Line,
+							EndCol:    pos.Column - 1 + len(name.Name),
 						})
 					}
 				}

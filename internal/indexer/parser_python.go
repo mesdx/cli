@@ -37,12 +37,13 @@ func (p *PythonParser) Parse(filename string, src []byte) (*symbols.FileResult, 
 		col := colAt(content, m[0], name)
 		currentClass = name
 		classes = append(classes, pyClassInfo{name: name, line: line})
+		endLine := pythonBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindClass,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -102,6 +103,7 @@ func (p *PythonParser) Parse(filename string, src []byte) (*symbols.FileResult, 
 		}
 
 		sig := "def " + name + "(" + strings.TrimSpace(params) + ")"
+		endLine := pythonBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:          name,
 			Kind:          kind,
@@ -109,7 +111,7 @@ func (p *PythonParser) Parse(filename string, src []byte) (*symbols.FileResult, 
 			Signature:     sig,
 			StartLine:     line,
 			StartCol:      col,
-			EndLine:       line,
+			EndLine:       endLine,
 			EndCol:        col + len(name),
 		})
 	}

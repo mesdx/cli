@@ -21,10 +21,14 @@ type codeWindow struct {
 	endLine   int
 }
 
-// fetchDefinitionsCode reads and concatenates code for all definitions
+// fetchDefinitionsCode reads and concatenates code for all definitions.
+// It expands the start line backward to include leading doc comments/annotations.
 func fetchDefinitionsCode(repoRoot string, results []indexer.DefinitionResult) (string, error) {
 	var sb strings.Builder
 	totalChars := 0
+
+	// Cache file lines by path to avoid repeated reads
+	fileCache := map[string][]string{}
 
 	for i, def := range results {
 		if i > 0 {
@@ -32,40 +36,55 @@ func fetchDefinitionsCode(repoRoot string, results []indexer.DefinitionResult) (
 			totalChars += 2
 		}
 
+		absPath := safeJoinPath(repoRoot, def.Location.Path)
+		if absPath == "" {
+			continue
+		}
+
+		// Read file lines (cached)
+		fileLines, ok := fileCache[absPath]
+		if !ok {
+			var err error
+			fileLines, err = readFileAllLines(absPath)
+			if err != nil {
+				continue
+			}
+			fileCache[absPath] = fileLines
+		}
+
+		// Expand start to include leading doc comments/decorators
+		lang := indexer.DetectLang(def.Location.Path)
+		startLine := indexer.FindDocStartLine(fileLines, def.Location.StartLine, lang)
+		endLine := def.Location.EndLine
+		if endLine > len(fileLines) {
+			endLine = len(fileLines)
+		}
+
 		// Write header
 		header := fmt.Sprintf("--- %s:%d-%d (%s %s) ---\n",
 			def.Location.Path,
-			def.Location.StartLine,
-			def.Location.EndLine,
+			startLine,
+			endLine,
 			def.Name,
 			def.Kind,
 		)
 		sb.WriteString(header)
 		totalChars += len(header)
 
-		// Read code
-		absPath := safeJoinPath(repoRoot, def.Location.Path)
-		if absPath == "" {
-			continue
-		}
-
-		code, err := readFileLines(absPath, def.Location.StartLine, def.Location.EndLine)
-		if err != nil {
-			// Log error but continue with other definitions
-			continue
-		}
-
-		if totalChars+len(code) > maxCodeChars {
-			remaining := maxCodeChars - totalChars
-			if remaining > 0 {
-				sb.WriteString(code[:remaining])
+		// Write lines
+		for line := startLine; line <= endLine; line++ {
+			lineStr := fmt.Sprintf("%6d| %s\n", line, fileLines[line-1])
+			if totalChars+len(lineStr) > maxCodeChars {
+				remaining := maxCodeChars - totalChars
+				if remaining > 0 {
+					sb.WriteString(lineStr[:remaining])
+				}
+				sb.WriteString("\n... [truncated: output too large] ...")
+				return sb.String(), nil
 			}
-			sb.WriteString("\n... [truncated: output too large] ...")
-			break
+			sb.WriteString(lineStr)
+			totalChars += len(lineStr)
 		}
-
-		sb.WriteString(code)
-		totalChars += len(code)
 	}
 
 	return sb.String(), nil

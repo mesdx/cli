@@ -38,12 +38,13 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
 		currentClass = name
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindClass,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -57,12 +58,13 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindInterface,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -76,12 +78,13 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		name := sub[1]
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:      name,
 			Kind:      symbols.KindEnum,
 			StartLine: line,
 			StartCol:  col,
-			EndLine:   line,
+			EndLine:   endLine,
 			EndCol:    col + len(name),
 		})
 	}
@@ -100,6 +103,7 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
 		sig := name + "(" + strings.TrimSpace(sub[2]) + ")"
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:          name,
 			Kind:          symbols.KindMethod,
@@ -107,7 +111,7 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 			Signature:     sig,
 			StartLine:     line,
 			StartCol:      col,
-			EndLine:       line,
+			EndLine:       endLine,
 			EndCol:        col + len(name),
 		})
 	}
@@ -125,13 +129,14 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		}
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:          name,
 			Kind:          symbols.KindConstructor,
 			ContainerName: name,
 			StartLine:     line,
 			StartCol:      col,
-			EndLine:       line,
+			EndLine:       endLine,
 			EndCol:        col + len(name),
 		})
 	}
@@ -148,13 +153,14 @@ func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, er
 		}
 		line := lineAt(content, m[0])
 		col := colAt(content, m[0], name)
+		endLine := findBlockEndLine(lines, line)
 		result.Symbols = append(result.Symbols, symbols.Symbol{
 			Name:          name,
 			Kind:          symbols.KindField,
 			ContainerName: currentClass,
 			StartLine:     line,
 			StartCol:      col,
-			EndLine:       line,
+			EndLine:       endLine,
 			EndCol:        col + len(name),
 		})
 	}

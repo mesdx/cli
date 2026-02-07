@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "codeintelx": {
+      "command": "/Users/mehmetozturk/projects/codeintelx/cli/codeintelx",
+      "args": ["mcp"]
+    }
+  }
+}

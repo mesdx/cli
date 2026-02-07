@@ -63,7 +63,7 @@ func newMcpCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
 		Short: "Start the MCP server",
-		Long:  "Start the Model Context Protocol server for Claude Code integration.",
+		Long:  "Start the Model Context Protocol server for Agentic code integration.",
 		RunE:  runMcp,
 	}
 
