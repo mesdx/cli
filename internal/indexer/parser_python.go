@@ -192,12 +192,3 @@ func classForLine(classes []pyClassInfo, line int) string {
 	}
 	return best
 }
-
-// colOffset returns the byte offset of the start of the line containing offset.
-func colOffset(content string, offset int) int {
-	i := strings.LastIndex(content[:offset], "\n")
-	if i < 0 {
-		return offset
-	}
-	return offset - i - 1
-}

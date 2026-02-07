@@ -17,7 +17,6 @@ var (
 	javaMethodRe      = regexp.MustCompile(`(?m)^\s*(?:public\s+|private\s+|protected\s+)?(?:abstract\s+|static\s+|final\s+|synchronized\s+|native\s+)*(?:[\w<>\[\],\s]+?)\s+(\w+)\s*\(([^)]*)\)`)
 	javaFieldRe       = regexp.MustCompile(`(?m)^\s*(?:public\s+|private\s+|protected\s+)?(?:static\s+|final\s+|volatile\s+|transient\s+)*(?:[\w<>\[\],]+)\s+(\w+)\s*[;=]`)
 	javaConstructorRe = regexp.MustCompile(`(?m)^\s*(?:public\s+|private\s+|protected\s+)?(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w,\s]+)?\s*\{`)
-	javaImportRe      = regexp.MustCompile(`(?m)^import\s+(?:static\s+)?([\w.]+);`)
 )
 
 func (p *JavaParser) Parse(filename string, src []byte) (*symbols.FileResult, error) {

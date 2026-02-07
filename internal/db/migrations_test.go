@@ -132,7 +132,9 @@ func TestBackfillV1(t *testing.T) {
 
 	// Verify v1 is recorded.
 	var count int
-	d2.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 1`).Scan(&count)
+	if err := d2.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version = 1`).Scan(&count); err != nil {
+		t.Fatalf("failed to query v1 migration record: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("v1 migration record count = %d, want 1", count)
 	}

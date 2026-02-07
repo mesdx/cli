@@ -172,14 +172,18 @@ func addIgnoreEntry(filePath string) error {
 
 	if stat.Size() > 0 {
 		// Check if last character is newline
-		file.Seek(stat.Size()-1, 0)
+		if _, err := file.Seek(stat.Size()-1, 0); err != nil {
+			return err
+		}
 		var lastChar [1]byte
 		if _, err := file.Read(lastChar[:]); err == nil && lastChar[0] != '\n' {
 			if _, err := file.WriteString("\n"); err != nil {
 				return err
 			}
 		}
-		file.Seek(0, 2) // Seek to end
+		if _, err := file.Seek(0, 2); err != nil { // Seek to end
+			return err
+		}
 	}
 
 	// Append ignore entry with comment
