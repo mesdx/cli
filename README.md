@@ -130,3 +130,7 @@ This will:
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution guidelines.
+
+## License
+
+This project is licensed under the **Functional Source License, Version 1.1, ALv2 Future License** (**FSL-1.1-ALv2**). See [`LICENSE`](LICENSE).
