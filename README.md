@@ -78,6 +78,21 @@ Verify installation:
 codeintelx --version
 ```
 
+**Optional: Verify checksum**
+
+For security, you can verify the SHA256 checksum:
+
+```bash
+# Download the checksum file
+curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-darwin-arm64.sha256 -o /tmp/codeintelx.sha256
+
+# Verify (macOS)
+cd "$install_dir" && shasum -a 256 -c /tmp/codeintelx.sha256
+
+# Verify (Linux)
+cd "$install_dir" && sha256sum -c /tmp/codeintelx.sha256
+```
+
 ### 2. Add to Claude Code
 
 Claude Code can add MCP servers via the CLI (recommended). See the official [Claude Code MCP docs](https://code.claude.com/docs/en/mcp).

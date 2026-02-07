@@ -76,14 +76,12 @@ jobs:
       - name: Create checksums
         working-directory: ./artifacts
         run: |
-          for file in codeintelx-*; do
-            sha256sum "$file" > "${file}.sha256"
-          done
+          find . -type f -name "codeintelx-*" ! -name "*.sha256" -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./artifacts/*
+          files: ./artifacts/**/*
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
