@@ -51,38 +51,6 @@ Run tests for a specific package:
 go test ./internal/repo
 ```
 
-## Project Structure
-
-```
-cli/
-├── cmd/
-│   └── codeintelx/          # CLI entry point
-│       └── main.go
-├── internal/
-│   ├── cli/                 # Cobra commands
-│   │   ├── root.go         # Root command
-│   │   ├── init.go         # Init command
-│   │   └── mcp.go          # MCP server command
-│   ├── config/             # Configuration management
-│   ├── db/                 # Database operations
-│   ├── ignore/             # Gitignore/Dockerignore handling
-│   └── repo/               # Repository detection
-├── go.mod
-├── go.sum
-├── README.md
-└── CONTRIBUTING.md
-```
-
-## Dependencies
-
-The project uses the following key dependencies:
-
-- `github.com/spf13/cobra` - CLI framework with autocompletion support
-- `github.com/charmbracelet/huh` - Interactive prompts with arrow-key selection
-- `github.com/charmbracelet/lipgloss` - Terminal styling and colors
-- `modernc.org/sqlite` - Pure-Go SQLite driver (no CGO required)
-- `github.com/modelcontextprotocol/go-sdk/mcp` - Official MCP SDK for Go
-
 ### Adding Dependencies
 
 Add a new dependency:

@@ -20,11 +20,11 @@ func DiscoverAllDirs(repoRoot string) ([]string, error) {
 		".env":            true,
 		"vendor":          true,
 		"target":          true,
-		"build":            true,
-		"dist":             true,
-		".idea":            true,
-		".vscode":          true,
-		".DS_Store":        true,
+		"build":           true,
+		"dist":            true,
+		".idea":           true,
+		".vscode":         true,
+		".DS_Store":       true,
 	}
 
 	err := filepath.Walk(repoRoot, func(path string, info os.FileInfo, err error) error {

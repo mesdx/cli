@@ -1,114 +1,52 @@
-# Codeintelx CLI
+<div align="center">
+  <img src="icon.png" alt="CodeIntelX" width="128" height="128">
+  <h1>CodeIntelX</h1>
+</div>
 
-Code intelligence CLI and MCP server for indexing codebases and exposing code intelligence via Model Context Protocol.
+CodeIntelX is a tool which keeps track of your code and serves as a niche layer of code intelligence for Claude Code like tools.
 
 ## Installation
 
-### From GitHub Releases (Recommended)
+### 1. Install CodeIntelX Binary
 
 Download the pre-built binary for your platform from the [latest release](https://github.com/codeintelx/cli/releases/latest).
 
-#### macOS (M1/Apple Silicon)
-
+**macOS (Apple Silicon):**
 ```bash
-# Download for macOS ARM64
 curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-darwin-arm64 -o codeintelx
-
-# Make it executable
 chmod +x codeintelx
-
-# Move to a directory in your PATH
 sudo mv codeintelx /usr/local/bin/
 ```
 
-#### macOS (Intel)
-
+**macOS (Intel):**
 ```bash
-# Download for macOS AMD64
 curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-darwin-amd64 -o codeintelx
-
-# Make it executable
 chmod +x codeintelx
-
-# Move to a directory in your PATH
 sudo mv codeintelx /usr/local/bin/
 ```
 
-#### Linux
-
+**Linux:**
 ```bash
-# Download for Linux (AMD64)
+# AMD64
 curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-linux-amd64 -o codeintelx
 
-# Or for ARM64
+# ARM64
 curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-linux-arm64 -o codeintelx
 
-# Make it executable
 chmod +x codeintelx
-
-# Move to a directory in your PATH
 sudo mv codeintelx /usr/local/bin/
 ```
 
-#### Verify Installation
-
+Verify installation:
 ```bash
 codeintelx --version
 ```
 
-Or check the help:
+### 2. Add to Claude Code
 
-```bash
-codeintelx --help
-```
+1. Open Claude Code → **Settings** → **Developer** → **Edit Config**
 
-### From Source
-
-If you prefer to build from source:
-
-```bash
-git clone https://github.com/codeintelx/cli.git
-cd cli
-go build ./cmd/codeintelx
-```
-
-The binary will be created in the current directory. You can install it globally:
-
-```bash
-go install ./cmd/codeintelx
-```
-
-## Usage
-
-### Initialize a Repository
-
-Navigate to your repository root and run:
-
-```bash
-codeintelx init
-```
-
-This will:
-1. Detect the repository root (looks for `.git` directory or uses current directory)
-2. Prompt you to select source directories to index
-3. Create `.codeintelx/` directory with:
-   - `config.json` - Configuration file
-   - `index.db` - SQLite database for code intelligence data
-4. Optionally update `.gitignore` and `.dockerignore` to exclude `.codeintelx/`
-
-### Start MCP Server
-
-To start the MCP server for Claude Code integration:
-
-```bash
-codeintelx mcp
-```
-
-The server runs over stdio and exposes tools for code intelligence queries.
-
-## Claude Code Integration
-
-Add the following to your Claude Code MCP configuration (typically in `~/.config/claude-desktop/mcp.json` or similar):
+2. Add CodeIntelX to your `claude_desktop_config.json`:
 
 ```json
 {
@@ -121,17 +59,21 @@ Add the following to your Claude Code MCP configuration (typically in `~/.config
 }
 ```
 
-Make sure `codeintelx` is in your PATH, or use the full path to the binary.
+3. Restart Claude Code to load the MCP server.
 
-## Project Structure
+## Usage
 
-When you initialize a repository, codeintelx creates the following structure:
+### Initialize a Repository
 
+```bash
+cd /path/to/your/repo
+codeintelx init
 ```
-.codeintelx/
-├── config.json    # Repository configuration
-└── index.db       # SQLite database for code intelligence
-```
+
+This will:
+- Detect the repository root
+- Prompt you to select source directories to index
+- Create relevant configuration within repository, your repository data stays in repository.
 
 ## Contributing
 
