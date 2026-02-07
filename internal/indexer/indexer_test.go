@@ -21,7 +21,7 @@ func setupTestDB(t *testing.T) (*Store, func()) {
 		t.Fatalf("db.Open: %v", err)
 	}
 	store := &Store{DB: d}
-	return store, func() { d.Close() }
+	return store, func() { _ = d.Close() }
 }
 
 // testdataDir returns the absolute path to the testdata directory.

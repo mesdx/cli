@@ -157,7 +157,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	idx := indexer.New(d, repoRoot)
 	stats, err := idx.FullIndex(selectedDirs)

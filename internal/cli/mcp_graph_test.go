@@ -38,7 +38,7 @@ func TestFormatDependencyGraph_Mermaid(t *testing.T) {
 		Usages: []indexer.ScoredUsage{
 			{
 				UsageResult: indexer.UsageResult{
-					Name: "TestFunc",
+					Name:     "TestFunc",
 					Location: indexer.Location{Path: "pkg/bar.go", StartLine: 5},
 				},
 				DependencyScore: 0.85,

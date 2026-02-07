@@ -92,7 +92,7 @@ func isAlreadyIgnored(filePath string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -162,7 +162,7 @@ func addIgnoreEntry(filePath string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Add a newline if file doesn't end with one, then add our entry
 	stat, err := file.Stat()

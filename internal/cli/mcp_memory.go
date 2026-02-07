@@ -31,9 +31,9 @@ type MemoryReadArgs struct {
 
 // MemoryUpdateArgs is the input for memoryUpdate.
 type MemoryUpdateArgs struct {
-	MemoryID string             `json:"memoryId"`
-	Title    *string            `json:"title,omitempty"`
-	Content  *string            `json:"content,omitempty"`
+	MemoryID string              `json:"memoryId"`
+	Title    *string             `json:"title,omitempty"`
+	Content  *string             `json:"content,omitempty"`
 	Symbols  *[]memory.SymbolRef `json:"symbols,omitempty"`
 }
 
@@ -215,13 +215,13 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 			// Ambiguity — fail with candidates
 			text := formatAmbiguousMemories(active)
 			return &mcp.CallToolResult{
-				Content: []mcp.Content{&mcp.TextContent{Text: text}},
-				IsError: true,
-			}, map[string]interface{}{
-				"ambiguous":  true,
-				"candidates": active,
-				"hint":       "Provide a specific memoryId or mdRelPath to disambiguate.",
-			}, nil
+					Content: []mcp.Content{&mcp.TextContent{Text: text}},
+					IsError: true,
+				}, map[string]interface{}{
+					"ambiguous":  true,
+					"candidates": active,
+					"hint":       "Provide a specific memoryId or mdRelPath to disambiguate.",
+				}, nil
 		}
 
 		// Exactly one — proceed

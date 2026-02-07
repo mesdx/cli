@@ -131,7 +131,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	if err := db.Migrate(d); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
@@ -575,7 +575,7 @@ func startFileWatcher(ctx context.Context, idx *indexer.Indexer, cfg *config.Con
 		log.Printf("fsnotify: failed to create watcher: %v", err)
 		return
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	// Add source root directories (recursively)
 	for _, root := range cfg.SourceRoots {
@@ -1059,7 +1059,7 @@ func startMemoryWatcher(ctx context.Context, mgr *memory.Manager) {
 		log.Printf("memory fsnotify: failed to create watcher: %v", err)
 		return
 	}
-	defer watcher.Close()
+	defer func() { _ = watcher.Close() }()
 
 	if err := addWatchRecursive(watcher, mgr.MemoryDir); err != nil {
 		log.Printf("memory fsnotify: failed to watch %s: %v", mgr.MemoryDir, err)

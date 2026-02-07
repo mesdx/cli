@@ -242,7 +242,7 @@ func readFileLines(path string, startLine, endLine int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var sb strings.Builder
 	scanner := bufio.NewScanner(file)
@@ -271,7 +271,7 @@ func readFileAllLines(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	var lines []string
 	scanner := bufio.NewScanner(file)

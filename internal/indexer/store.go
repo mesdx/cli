@@ -80,7 +80,7 @@ func (s *Store) AllFiles() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	m := map[string]string{}
 	for rows.Next() {
 		var path, sha string
@@ -194,7 +194,7 @@ func (s *Store) DeleteAllFiles() error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var ids []int64
 	for rows.Next() {
 		var id int64

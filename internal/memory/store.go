@@ -187,7 +187,7 @@ func (s *MemoryStore) ListMemories(scope, filePath string) ([]MemoryRow, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []MemoryRow
 	for rows.Next() {
@@ -208,7 +208,7 @@ func (s *MemoryStore) AllMemoryPaths() (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	m := make(map[string]string)
 	for rows.Next() {
 		var path, hash string
@@ -290,7 +290,7 @@ func (s *MemoryStore) SearchMemories(queryText, scope, filePath string, limit in
 	if err != nil {
 		return nil, fmt.Errorf("search memories: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	totalGrams := float64(len(grams))
 	var results []SearchResult

@@ -25,7 +25,7 @@ func Open(dbPath string) (*sql.DB, error) {
 	}
 	// Enable WAL mode + foreign keys for performance and correctness.
 	if _, err := d.Exec(`PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;`); err != nil {
-		d.Close()
+		_ = d.Close()
 		return nil, fmt.Errorf("failed to set pragmas: %w", err)
 	}
 	return d, nil
@@ -42,7 +42,7 @@ func Initialize(dbPath string) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	// Run versioned migrations
 	if err := Migrate(d); err != nil {

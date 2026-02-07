@@ -362,7 +362,7 @@ func setupDepScoreTest(t *testing.T) (*Navigator, string, func()) {
 	}
 
 	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID}
-	return nav, repoRoot, func() { d.Close() }
+	return nav, repoRoot, func() { _ = d.Close() }
 }
 
 func TestScoreUsages_GoFixture(t *testing.T) {

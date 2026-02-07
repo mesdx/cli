@@ -89,12 +89,9 @@ const (
 // ---------------------------------------------------------------------------
 
 var (
-	patNew       = regexp.MustCompile(`\bnew\s+\w+`)
-	patCall      = regexp.MustCompile(`\w+\s*\(`)
-	patExtends   = regexp.MustCompile(`\b(?:extends|implements)\s+\w+`)
-	patTypeHint  = regexp.MustCompile(`(?::\s*\w+|->)\s*\w+`)
-	patDotAccess = regexp.MustCompile(`\.\w+`)
-	patInherit   = regexp.MustCompile(`\b(?:extends|implements|:\s*public|:\s*private|:\s*protected)\s+\w+`)
+	patNew      = regexp.MustCompile(`\bnew\s+\w+`)
+	patExtends  = regexp.MustCompile(`\b(?:extends|implements)\s+\w+`)
+	patTypeHint = regexp.MustCompile(`(?::\s*\w+|->)\s*\w+`)
 )
 
 // ---------------------------------------------------------------------------
@@ -520,12 +517,8 @@ func BuildDependencyGraph(
 	if maxDepth >= 1 {
 		outbound, err := computeOutbound(nav, primaryDef, primaryNodeID, lang, repoRoot)
 		if err == nil {
-			for _, node := range outbound.nodes {
-				graph.SymbolGraph.Nodes = append(graph.SymbolGraph.Nodes, node)
-			}
-			for _, edge := range outbound.edges {
-				graph.SymbolGraph.Edges = append(graph.SymbolGraph.Edges, edge)
-			}
+			graph.SymbolGraph.Nodes = append(graph.SymbolGraph.Nodes, outbound.nodes...)
+			graph.SymbolGraph.Edges = append(graph.SymbolGraph.Edges, outbound.edges...)
 		}
 	}
 
@@ -754,7 +747,7 @@ func readSingleLine(absPath string, lineNum int) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	scanner := bufio.NewScanner(f)
 	current := 0

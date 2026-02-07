@@ -27,7 +27,7 @@ func setupNavigationTest(t *testing.T) (*Navigator, *Indexer, func()) {
 	}
 
 	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID}
-	return nav, idx, func() { d.Close() }
+	return nav, idx, func() { _ = d.Close() }
 }
 
 func TestGoToDefinitionByName(t *testing.T) {

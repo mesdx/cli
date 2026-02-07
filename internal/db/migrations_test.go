@@ -17,7 +17,7 @@ func TestMigrateCreatesAllTables(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	// All expected tables must exist.
 	for _, table := range []string{"schema_migrations", "meta", "projects", "source_roots", "files", "symbols", "refs", "memories", "memory_symbols", "memory_ngrams"} {
@@ -39,7 +39,7 @@ func TestMigrateIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	// Running migrate again should not error.
 	if err := Migrate(d); err != nil {
@@ -65,13 +65,13 @@ func TestMigrateRecordsMigrationVersions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	rows, err := d.Query(`SELECT version, name FROM schema_migrations ORDER BY version`)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var versions []int
 	for rows.Next() {
@@ -109,14 +109,14 @@ func TestBackfillV1(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create old schema: %v", err)
 	}
-	d.Close()
+	_ = d.Close()
 
 	// Now run Migrate — it should detect v1 tables, backfill, then apply v2.
 	d2, err := Open(dbPath)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer d2.Close()
+	defer func() { _ = d2.Close() }()
 
 	if err := Migrate(d2); err != nil {
 		t.Fatalf("Migrate on old DB: %v", err)

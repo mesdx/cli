@@ -21,7 +21,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	t.Cleanup(func() { d.Close() })
+	t.Cleanup(func() { _ = d.Close() })
 
 	// Create a project
 	_, err = d.Exec(`INSERT INTO projects (repo_root) VALUES (?)`, "/tmp/test-repo")

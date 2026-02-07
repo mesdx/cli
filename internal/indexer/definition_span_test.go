@@ -27,7 +27,7 @@ func setupSpanTest(t *testing.T) (*Navigator, func()) {
 	}
 
 	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID}
-	return nav, func() { d.Close() }
+	return nav, func() { _ = d.Close() }
 }
 
 // ---------- Go span tests ----------
@@ -699,7 +699,7 @@ func TestFindBlockEndLine(t *testing.T) {
 		"    Port int",            // line 3
 		"}",                       // line 4
 		"",                        // line 5
-		"func main() {",          // line 6
+		"func main() {",           // line 6
 		"    fmt.Println(\"hi\")", // line 7
 		"}",                       // line 8
 	}
@@ -725,16 +725,16 @@ func TestFindBlockEndLine(t *testing.T) {
 
 func TestPythonBlockEndLine(t *testing.T) {
 	lines := []string{
-		"class Foo:",              // line 1
-		"    def bar(self):",      // line 2
-		"        print('hello')",  // line 3
-		"        print('world')",  // line 4
-		"",                        // line 5
-		"    def baz(self):",      // line 6
-		"        pass",            // line 7
-		"",                        // line 8
-		"def top_level():",        // line 9
-		"    return 42",           // line 10
+		"class Foo:",             // line 1
+		"    def bar(self):",     // line 2
+		"        print('hello')", // line 3
+		"        print('world')", // line 4
+		"",                       // line 5
+		"    def baz(self):",     // line 6
+		"        pass",           // line 7
+		"",                       // line 8
+		"def top_level():",       // line 9
+		"    return 42",          // line 10
 	}
 
 	// Class: starts at line 1, body extends through line 7
@@ -760,45 +760,45 @@ func TestPythonBlockEndLine(t *testing.T) {
 
 func TestFindDocStartLine(t *testing.T) {
 	goLines := []string{
-		"package main",               // line 1
-		"",                           // line 2
-		"// Config holds config.",     // line 3
-		"// It supports many envs.",   // line 4
-		"type Config struct {",        // line 5
+		"package main",              // line 1
+		"",                          // line 2
+		"// Config holds config.",   // line 3
+		"// It supports many envs.", // line 4
+		"type Config struct {",      // line 5
 	}
 	if start := FindDocStartLine(goLines, 5, LangGo); start != 3 {
 		t.Errorf("Go doc start: got %d, want 3", start)
 	}
 
 	pyLines := []string{
-		"",                          // line 1
-		"# A helper decorator",      // line 2
-		"@my_decorator",             // line 3
-		"def my_func():",            // line 4
-		"    pass",                  // line 5
+		"",                     // line 1
+		"# A helper decorator", // line 2
+		"@my_decorator",        // line 3
+		"def my_func():",       // line 4
+		"    pass",             // line 5
 	}
 	if start := FindDocStartLine(pyLines, 4, LangPython); start != 2 {
 		t.Errorf("Python doc start: got %d, want 2", start)
 	}
 
 	rustLines := []string{
-		"",                              // line 1
-		"/// AppConfig documentation.",   // line 2
-		"/// Second line.",               // line 3
-		"#[derive(Debug)]",              // line 4
-		"pub struct AppConfig {",         // line 5
+		"",                             // line 1
+		"/// AppConfig documentation.", // line 2
+		"/// Second line.",             // line 3
+		"#[derive(Debug)]",             // line 4
+		"pub struct AppConfig {",       // line 5
 	}
 	if start := FindDocStartLine(rustLines, 5, LangRust); start != 2 {
 		t.Errorf("Rust doc start: got %d, want 2", start)
 	}
 
 	javaLines := []string{
-		"",                           // line 1
-		"/**",                        // line 2
-		" * Javadoc for MyClass.",    // line 3
-		" */",                        // line 4
-		"@Deprecated",               // line 5
-		"public class MyClass {",    // line 6
+		"",                        // line 1
+		"/**",                     // line 2
+		" * Javadoc for MyClass.", // line 3
+		" */",                     // line 4
+		"@Deprecated",             // line 5
+		"public class MyClass {",  // line 6
 	}
 	if start := FindDocStartLine(javaLines, 6, LangJava); start != 2 {
 		t.Errorf("Java doc start: got %d, want 2", start)
@@ -806,9 +806,9 @@ func TestFindDocStartLine(t *testing.T) {
 
 	// No doc comment — should return declLine unchanged
 	noDocs := []string{
-		"",                       // line 1
-		"",                       // line 2
-		"type Foo struct {}",     // line 3
+		"",                   // line 1
+		"",                   // line 2
+		"type Foo struct {}", // line 3
 	}
 	if start := FindDocStartLine(noDocs, 3, LangGo); start != 3 {
 		t.Errorf("no doc start: got %d, want 3", start)

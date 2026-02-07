@@ -10,7 +10,7 @@ import (
 func TestAssetNameForPlatform(t *testing.T) {
 	expected := "codeintelx-" + runtime.GOOS + "-" + runtime.GOARCH
 	actual := assetNameForPlatform()
-	
+
 	if actual != expected {
 		t.Errorf("assetNameForPlatform() = %q, want %q", actual, expected)
 	}
@@ -70,7 +70,7 @@ func TestCanWriteToPath(t *testing.T) {
 	// Create a temp directory we can write to
 	tmpDir := t.TempDir()
 	tmpFile := filepath.Join(tmpDir, "test-executable")
-	
+
 	// Create a test file
 	if err := os.WriteFile(tmpFile, []byte("test"), 0755); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
@@ -96,8 +96,8 @@ func TestCanWriteToPath(t *testing.T) {
 
 func TestCheckAndUpdate_SkipWhenDisabled(t *testing.T) {
 	// Set env var to disable
-	os.Setenv("CODEINTELX_NO_SELF_UPDATE", "1")
-	defer os.Unsetenv("CODEINTELX_NO_SELF_UPDATE")
+	_ = os.Setenv("CODEINTELX_NO_SELF_UPDATE", "1")
+	defer func() { _ = os.Unsetenv("CODEINTELX_NO_SELF_UPDATE") }()
 
 	// Should not error and should skip
 	err := CheckAndUpdate("v0.1.0")

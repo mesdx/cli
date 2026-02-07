@@ -59,7 +59,7 @@ func (n *Navigator) GoToDefinitionByName(name string, filterFile string, lang st
 	if err != nil {
 		return nil, fmt.Errorf("query definitions: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []DefinitionResult
 	for rows.Next() {
@@ -108,7 +108,7 @@ func (n *Navigator) FindUsagesByName(name string, filterFile string, lang string
 	if err != nil {
 		return nil, fmt.Errorf("query usages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []UsageResult
 	for rows.Next() {
@@ -155,7 +155,7 @@ func (n *Navigator) RefsInFileRange(filePath string, startLine, endLine int, lan
 	if err != nil {
 		return nil, fmt.Errorf("query refs in range: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var results []UsageResult
 	for rows.Next() {
