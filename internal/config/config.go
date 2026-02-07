@@ -9,10 +9,14 @@ import (
 
 const configFileName = "config.json"
 
+// DefaultMemoryDir is the default directory for storing memory markdown files.
+const DefaultMemoryDir = "docs/codeintelx-memory"
+
 // Config represents the codeintelx configuration.
 type Config struct {
 	RepoRoot    string   `json:"repoRoot"`
 	SourceRoots []string `json:"sourceRoots"`
+	MemoryDir   string   `json:"memoryDir,omitempty"`
 }
 
 // ConfigPath returns the path to the config file in the codeintelx directory.

@@ -12,6 +12,7 @@ import (
 	"github.com/codeintelx/cli/internal/db"
 	"github.com/codeintelx/cli/internal/ignore"
 	"github.com/codeintelx/cli/internal/indexer"
+	"github.com/codeintelx/cli/internal/memory"
 	"github.com/codeintelx/cli/internal/repo"
 	"github.com/spf13/cobra"
 )
@@ -91,6 +92,35 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
+	// Prompt for memory directory
+	memoryDir := config.DefaultMemoryDir
+	memoryDirForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Memory directory").
+				Description("Where should codeintelx store markdown memory files? (repo-relative, committed to VCS)").
+				Placeholder(config.DefaultMemoryDir).
+				Value(&memoryDir),
+		),
+	)
+	if err := memoryDirForm.Run(); err != nil {
+		return fmt.Errorf("interactive prompt failed: %w", err)
+	}
+	if memoryDir == "" {
+		memoryDir = config.DefaultMemoryDir
+	}
+	// Validate: not inside .codeintelx
+	if strings.HasPrefix(memoryDir, ".codeintelx") {
+		return fmt.Errorf("memory directory cannot be inside .codeintelx/")
+	}
+
+	// Create memory directory
+	memoryDirAbs := filepath.Join(repoRoot, memoryDir)
+	if err := os.MkdirAll(memoryDirAbs, 0755); err != nil {
+		return fmt.Errorf("failed to create memory directory: %w", err)
+	}
+	cmd.Printf("%s Memory directory: %s\n", successStyle.Render("✓"), memoryDir)
+
 	// Remove existing .codeintelx directory and recreate (bulk replace)
 	codeintelxDir := repo.CodeintelxDir(repoRoot)
 	if err := os.RemoveAll(codeintelxDir); err != nil {
@@ -104,6 +134,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 	cfg := &config.Config{
 		RepoRoot:    repoRoot,
 		SourceRoots: selectedDirs,
+		MemoryDir:   memoryDir,
 	}
 	if err := config.Save(cfg, codeintelxDir); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
@@ -119,7 +150,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	cmd.Printf("%s Database initialized at: %s\n", successStyle.Render("✓"), dbPath)
 
-	// Run bulk indexing on files
+	// Run bulk indexing on source files
 	cmd.Printf("%s Indexing source files...\n", infoStyle.Render("→"))
 
 	d, err := db.Open(dbPath)
@@ -139,6 +170,18 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if stats.Errors > 0 {
 		cmd.Printf("%s %d files had errors during indexing\n", infoStyle.Render("!"), stats.Errors)
 	}
+
+	// Bulk-index existing memory files (if any exist in the memory dir)
+	cmd.Printf("%s Indexing memory files...\n", infoStyle.Render("→"))
+	memMgr := memory.NewManager(d, idx.Store.ProjectID, repoRoot, memoryDirAbs)
+	if err := memMgr.BulkIndex(); err != nil {
+		cmd.Printf("%s Warning: failed to bulk-index memories: %v\n", infoStyle.Render("!"), err)
+	}
+	// Run initial reconcile on memories (file/symbol status)
+	if err := memMgr.Reconcile(); err != nil {
+		cmd.Printf("%s Warning: failed to reconcile memories: %v\n", infoStyle.Render("!"), err)
+	}
+	cmd.Printf("%s Memory indexing complete\n", successStyle.Render("✓"))
 
 	// Handle .gitignore and .dockerignore prompts
 	if err := ignore.HandleIgnoreFiles(repoRoot, cmd); err != nil {

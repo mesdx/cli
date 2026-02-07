@@ -14,7 +14,7 @@ type migration struct {
 }
 
 // migrations is the ordered list of all schema migrations.
-// Append-only: never modify existing entries.
+// Pre-release: memory tables are included in v2 instead of a separate migration.
 var migrations = []migration{
 	{
 		Version: 1,
@@ -41,7 +41,7 @@ var migrations = []migration{
 	},
 	{
 		Version: 2,
-		Name:    "add_files_symbols_references",
+		Name:    "add_files_symbols_references_and_memories",
 		SQL: `
 			-- Indexed source files
 			CREATE TABLE IF NOT EXISTS files (
@@ -90,6 +90,49 @@ var migrations = []migration{
 			);
 			CREATE INDEX IF NOT EXISTS idx_refs_name ON refs(name);
 			CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_id);
+
+			-- Memory elements (markdown-backed, scoped to project or file)
+			CREATE TABLE IF NOT EXISTS memories (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				project_id INTEGER NOT NULL,
+				memory_uid TEXT NOT NULL,
+				scope TEXT NOT NULL DEFAULT 'project',
+				file_path TEXT NOT NULL DEFAULT '',
+				md_rel_path TEXT NOT NULL,
+				title TEXT NOT NULL DEFAULT '',
+				status TEXT NOT NULL DEFAULT 'active',
+				file_status TEXT NOT NULL DEFAULT 'active',
+				body_hash TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL DEFAULT (datetime('now')),
+				updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+				FOREIGN KEY (project_id) REFERENCES projects(id),
+				UNIQUE (project_id, md_rel_path)
+			);
+			CREATE INDEX IF NOT EXISTS idx_memories_project_scope ON memories(project_id, scope, file_path);
+			CREATE INDEX IF NOT EXISTS idx_memories_md_rel_path ON memories(project_id, md_rel_path);
+			CREATE INDEX IF NOT EXISTS idx_memories_uid ON memories(project_id, memory_uid);
+
+			-- Symbol references attached to memories
+			CREATE TABLE IF NOT EXISTS memory_symbols (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				memory_id INTEGER NOT NULL,
+				language TEXT NOT NULL,
+				name TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'active',
+				last_resolved_at TEXT NOT NULL DEFAULT '',
+				FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_symbols_memory ON memory_symbols(memory_id);
+
+			-- Ngram tokens for memory search
+			CREATE TABLE IF NOT EXISTS memory_ngrams (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				memory_id INTEGER NOT NULL,
+				gram TEXT NOT NULL,
+				FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+			);
+			CREATE INDEX IF NOT EXISTS idx_memory_ngrams_gram ON memory_ngrams(gram);
+			CREATE INDEX IF NOT EXISTS idx_memory_ngrams_memory ON memory_ngrams(memory_id);
 		`,
 	},
 }

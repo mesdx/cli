@@ -20,7 +20,7 @@ func TestMigrateCreatesAllTables(t *testing.T) {
 	defer d.Close()
 
 	// All expected tables must exist.
-	for _, table := range []string{"schema_migrations", "meta", "projects", "source_roots", "files", "symbols", "refs"} {
+	for _, table := range []string{"schema_migrations", "meta", "projects", "source_roots", "files", "symbols", "refs", "memories", "memory_symbols", "memory_ngrams"} {
 		var name string
 		err := d.QueryRow(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&name)
 		if err != nil {

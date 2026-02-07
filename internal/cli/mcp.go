@@ -14,6 +14,7 @@ import (
 	"github.com/codeintelx/cli/internal/config"
 	"github.com/codeintelx/cli/internal/db"
 	"github.com/codeintelx/cli/internal/indexer"
+	"github.com/codeintelx/cli/internal/memory"
 	"github.com/codeintelx/cli/internal/repo"
 	"github.com/fsnotify/fsnotify"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -155,11 +156,35 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		ProjectID: idx.Store.ProjectID,
 	}
 
+	// Create memory manager (if memory dir is configured)
+	var memMgr *memory.Manager
+	if cfg.MemoryDir != "" {
+		memDirAbs := cfg.MemoryDir
+		if !filepath.IsAbs(memDirAbs) {
+			memDirAbs = filepath.Join(repoRoot, memDirAbs)
+		}
+		memMgr = memory.NewManager(d, idx.Store.ProjectID, repoRoot, memDirAbs)
+
+		// Bulk-index existing memory files
+		if err := memMgr.BulkIndex(); err != nil {
+			log.Printf("memory bulk index error: %v", err)
+		}
+		// Reconcile file/symbol statuses
+		if err := memMgr.Reconcile(); err != nil {
+			log.Printf("memory reconcile error: %v", err)
+		}
+	}
+
 	// Start file watcher in background
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	go startFileWatcher(ctx, idx, cfg, repoRoot)
+
+	// Start memory dir watcher in background (if configured)
+	if memMgr != nil {
+		go startMemoryWatcher(ctx, memMgr)
+	}
 
 	// Create MCP server
 	server := mcp.NewServer(&mcp.Implementation{
@@ -291,6 +316,40 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		if args.SymbolName != "" {
 			symbolName = args.SymbolName
 			filterFile = args.FilePath
+
+			// Ambiguity check: name-based lookups must resolve to exactly one definition.
+			ambigCandidates, ambigErr := nav.GoToDefinitionByName(args.SymbolName, args.FilePath, args.Language)
+			if ambigErr != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: %v", ambigErr)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+			if len(ambigCandidates) == 0 {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: no definitions found for %q", args.SymbolName)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+			if len(ambigCandidates) > 1 {
+				text := formatAmbiguousFindUsages(args.SymbolName, ambigCandidates)
+				return &mcp.CallToolResult{
+						Content: []mcp.Content{
+							&mcp.TextContent{Text: text},
+						},
+						IsError: true,
+					}, map[string]interface{}{
+						"ambiguous":            true,
+						"definitionCandidates": ambigCandidates,
+						"hint":                 "Supply a filePath filter or use cursor-based lookup (filePath + line + column) to disambiguate.",
+					}, nil
+			}
+			primaryDef = &ambigCandidates[0]
+
 			results, err = nav.FindUsagesByName(args.SymbolName, args.FilePath, args.Language)
 		} else if args.FilePath != "" && args.Line > 0 {
 			relPath := toRepoRelative(args.FilePath, repoRoot)
@@ -499,6 +558,11 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			},
 		}, graph, nil
 	})
+
+	// Register memory tools (if memory dir is configured)
+	if memMgr != nil {
+		registerMemoryTools(server, memMgr)
+	}
 
 	// Run server over stdio
 	return server.Run(context.Background(), &mcp.StdioTransport{})
@@ -985,4 +1049,94 @@ func buildSchema(v interface{}) map[string]interface{} {
 	}
 
 	return schema
+}
+
+// startMemoryWatcher watches the memory directory for markdown file changes
+// and incrementally updates the memory index.
+func startMemoryWatcher(ctx context.Context, mgr *memory.Manager) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.Printf("memory fsnotify: failed to create watcher: %v", err)
+		return
+	}
+	defer watcher.Close()
+
+	if err := addWatchRecursive(watcher, mgr.MemoryDir); err != nil {
+		log.Printf("memory fsnotify: failed to watch %s: %v", mgr.MemoryDir, err)
+		return
+	}
+
+	log.Printf("memory watcher started for %s", mgr.MemoryDir)
+
+	var mu sync.Mutex
+	pending := map[string]struct{}{}
+	var timer *time.Timer
+
+	flush := func() {
+		mu.Lock()
+		files := pending
+		pending = map[string]struct{}{}
+		mu.Unlock()
+
+		for path := range files {
+			if !strings.HasSuffix(strings.ToLower(path), ".md") {
+				continue
+			}
+			info, statErr := os.Stat(path)
+			if statErr != nil {
+				// File was deleted
+				if err := mgr.RemoveFile(path); err != nil {
+					log.Printf("memory: failed to remove %s: %v", path, err)
+				}
+				continue
+			}
+			if info.IsDir() {
+				_ = addWatchRecursive(watcher, path)
+				continue
+			}
+			if err := mgr.IndexFile(path); err != nil {
+				log.Printf("memory: failed to index %s: %v", path, err)
+			}
+		}
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case event, ok := <-watcher.Events:
+			if !ok {
+				return
+			}
+			if event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename|fsnotify.Remove) == 0 {
+				continue
+			}
+			mu.Lock()
+			pending[event.Name] = struct{}{}
+			if timer != nil {
+				timer.Stop()
+			}
+			timer = time.AfterFunc(200*time.Millisecond, flush)
+			mu.Unlock()
+
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				return
+			}
+			log.Printf("memory watcher error: %v", err)
+		}
+	}
+}
+
+// formatAmbiguousFindUsages formats an error message for ambiguous name-based findUsages.
+func formatAmbiguousFindUsages(symbolName string, candidates []indexer.DefinitionResult) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Error: ambiguous symbol %q — %d definition candidates found. Provide a filePath filter or use cursor-based lookup (filePath + line + column) to disambiguate.\n\n", symbolName, len(candidates))
+	for i, d := range candidates {
+		fmt.Fprintf(&b, "%d. %s (%s) at %s:%d\n", i+1, d.Name, d.Kind, d.Location.Path, d.Location.StartLine)
+		if d.Signature != "" {
+			fmt.Fprintf(&b, "   Signature: %s\n", d.Signature)
+		}
+	}
+	return b.String()
 }
