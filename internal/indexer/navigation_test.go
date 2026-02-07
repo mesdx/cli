@@ -36,25 +36,26 @@ func TestGoToDefinitionByName(t *testing.T) {
 
 	tests := []struct {
 		name      string
+		lang      string
 		wantFound bool
 	}{
-		{"Person", true},
-		{"NewPerson", true},
-		{"Greeter", true},
-		{"SayHello", true},
-		{"NonExistent", false},
+		{"Person", "go", true},
+		{"NewPerson", "go", true},
+		{"Greeter", "go", true},
+		{"SayHello", "go", true},
+		{"NonExistent", "go", false},
 	}
 
 	for _, tt := range tests {
-		results, err := nav.GoToDefinitionByName(tt.name, "")
+		results, err := nav.GoToDefinitionByName(tt.name, "", tt.lang)
 		if err != nil {
-			t.Fatalf("GoToDefinitionByName(%q): %v", tt.name, err)
+			t.Fatalf("GoToDefinitionByName(%q, %q): %v", tt.name, tt.lang, err)
 		}
 		if tt.wantFound && len(results) == 0 {
-			t.Errorf("GoToDefinitionByName(%q) returned 0 results, want >0", tt.name)
+			t.Errorf("GoToDefinitionByName(%q, %q) returned 0 results, want >0", tt.name, tt.lang)
 		}
 		if !tt.wantFound && len(results) > 0 {
-			t.Errorf("GoToDefinitionByName(%q) returned %d results, want 0", tt.name, len(results))
+			t.Errorf("GoToDefinitionByName(%q, %q) returned %d results, want 0", tt.name, tt.lang, len(results))
 		}
 	}
 }
@@ -63,33 +64,26 @@ func TestGoToDefinitionByNameReturnsCorrectInfo(t *testing.T) {
 	nav, _, cleanup := setupNavigationTest(t)
 	defer cleanup()
 
-	results, err := nav.GoToDefinitionByName("Person", "")
-	if err != nil {
-		t.Fatalf("GoToDefinitionByName: %v", err)
-	}
-
-	if len(results) == 0 {
-		t.Fatal("expected at least one result for Person")
-	}
-
-	// Person should be found across multiple languages
-	foundLangs := map[string]bool{}
-	for _, r := range results {
-		ext := filepath.Ext(r.Location.Path)
-		foundLangs[ext] = true
-
-		if r.Name != "Person" {
-			t.Errorf("unexpected name %q", r.Name)
+	// Test finding Person across different languages
+	langs := []string{"go", "python", "rust"}
+	for _, lang := range langs {
+		results, err := nav.GoToDefinitionByName("Person", "", lang)
+		if err != nil {
+			t.Fatalf("GoToDefinitionByName(Person, %s): %v", lang, err)
 		}
-		if r.Location.StartLine <= 0 {
-			t.Errorf("invalid start line: %d", r.Location.StartLine)
-		}
-	}
 
-	// Expect at least Go, Python, Rust
-	for _, ext := range []string{".go", ".py", ".rs"} {
-		if !foundLangs[ext] {
-			t.Errorf("Person not found in %s files", ext)
+		if len(results) == 0 {
+			t.Errorf("expected at least one result for Person in %s", lang)
+			continue
+		}
+
+		for _, r := range results {
+			if r.Name != "Person" {
+				t.Errorf("unexpected name %q", r.Name)
+			}
+			if r.Location.StartLine <= 0 {
+				t.Errorf("invalid start line: %d", r.Location.StartLine)
+			}
 		}
 	}
 }
@@ -100,14 +94,14 @@ func TestGoToDefinitionByPosition(t *testing.T) {
 
 	// In the Go fixture, NewPerson is on line 27 (0-indexed col ~5)
 	// The symbol "NewPerson" starts at some position. Let's look up by name first to know the position.
-	defs, err := nav.GoToDefinitionByName("NewPerson", "")
+	defs, err := nav.GoToDefinitionByName("NewPerson", "", "go")
 	if err != nil || len(defs) == 0 {
 		t.Skip("cannot find NewPerson definition to test cursor-based lookup")
 	}
 
 	// Use the found position for a cursor-based lookup
 	def := defs[0]
-	results, err := nav.GoToDefinitionByPosition(def.Location.Path, def.Location.StartLine, def.Location.StartCol)
+	results, err := nav.GoToDefinitionByPosition(def.Location.Path, def.Location.StartLine, def.Location.StartCol, "go")
 	if err != nil {
 		t.Fatalf("GoToDefinitionByPosition: %v", err)
 	}
@@ -121,7 +115,7 @@ func TestFindUsagesByName(t *testing.T) {
 	defer cleanup()
 
 	// "Person" should have usages across files
-	results, err := nav.FindUsagesByName("Person", "")
+	results, err := nav.FindUsagesByName("Person", "", "go")
 	if err != nil {
 		t.Fatalf("FindUsagesByName: %v", err)
 	}
@@ -135,7 +129,7 @@ func TestFindUsagesByNameGoFixture(t *testing.T) {
 	defer cleanup()
 
 	// "NewPerson" should have usage references in the Go fixture
-	results, err := nav.FindUsagesByName("NewPerson", "")
+	results, err := nav.FindUsagesByName("NewPerson", "", "go")
 	if err != nil {
 		t.Fatalf("FindUsagesByName: %v", err)
 	}
@@ -149,13 +143,13 @@ func TestFindUsagesByPosition(t *testing.T) {
 	defer cleanup()
 
 	// Find a known ref position
-	usages, err := nav.FindUsagesByName("NewPerson", "")
+	usages, err := nav.FindUsagesByName("NewPerson", "", "go")
 	if err != nil || len(usages) == 0 {
 		t.Skip("cannot find NewPerson usage to test cursor-based lookup")
 	}
 
 	ref := usages[0]
-	results, err := nav.FindUsagesByPosition(ref.Location.Path, ref.Location.StartLine, ref.Location.StartCol)
+	results, err := nav.FindUsagesByPosition(ref.Location.Path, ref.Location.StartLine, ref.Location.StartCol, "go")
 	if err != nil {
 		t.Fatalf("FindUsagesByPosition: %v", err)
 	}
@@ -168,7 +162,7 @@ func TestFindUsagesNonExistent(t *testing.T) {
 	nav, _, cleanup := setupNavigationTest(t)
 	defer cleanup()
 
-	results, err := nav.FindUsagesByName("CompletelyNonExistentSymbol12345", "")
+	results, err := nav.FindUsagesByName("CompletelyNonExistentSymbol12345", "", "go")
 	if err != nil {
 		t.Fatalf("FindUsagesByName: %v", err)
 	}

@@ -59,6 +59,21 @@ codeintelx --version
 }
 ```
 
+**Using a specific workspace directory:**
+
+If you want to point the MCP server at a specific workspace directory (useful when working with multiple projects), use the `--cwd` flag:
+
+```json
+{
+  "mcpServers": {
+    "codeintelx": {
+      "command": "codeintelx",
+      "args": ["mcp", "--cwd", "/path/to/your/workspace"]
+    }
+  }
+}
+```
+
 3. Restart Claude Code to load the MCP server.
 
 ## Usage

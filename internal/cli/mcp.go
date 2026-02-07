@@ -20,22 +20,43 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var supportedLanguages = map[string]bool{
+	"go":         true,
+	"java":       true,
+	"rust":       true,
+	"python":     true,
+	"typescript": true,
+	"javascript": true,
+}
+
+func validateLanguage(lang string) error {
+	if lang == "" {
+		return fmt.Errorf("language parameter is required")
+	}
+	if !supportedLanguages[lang] {
+		return fmt.Errorf("unsupported language %q; supported: go, java, rust, python, typescript, javascript", lang)
+	}
+	return nil
+}
+
 // GoToDefArgs is the input for the goToDefinition MCP tool.
 type GoToDefArgs struct {
-	FilePath   string `json:"filePath,omitempty"`
-	Line       int    `json:"line,omitempty"`
-	Column     int    `json:"column,omitempty"`
-	SymbolName string `json:"symbolName,omitempty"`
-	Language   string `json:"language,omitempty"`
+	FilePath     string `json:"filePath,omitempty"`
+	Line         int    `json:"line,omitempty"`
+	Column       int    `json:"column,omitempty"`
+	SymbolName   string `json:"symbolName,omitempty"`
+	Language     string `json:"language,omitempty"`
+	FetchTheCode *bool  `json:"fetchTheCode,omitempty"`
 }
 
 // FindUsagesArgs is the input for the findUsages MCP tool.
 type FindUsagesArgs struct {
-	FilePath   string `json:"filePath,omitempty"`
-	Line       int    `json:"line,omitempty"`
-	Column     int    `json:"column,omitempty"`
-	SymbolName string `json:"symbolName,omitempty"`
-	Language   string `json:"language,omitempty"`
+	FilePath             string `json:"filePath,omitempty"`
+	Line                 int    `json:"line,omitempty"`
+	Column               int    `json:"column,omitempty"`
+	SymbolName           string `json:"symbolName,omitempty"`
+	Language             string `json:"language,omitempty"`
+	FetchCodeLinesAround int    `json:"fetchCodeLinesAround,omitempty"`
 }
 
 func newMcpCmd() *cobra.Command {
@@ -46,10 +67,32 @@ func newMcpCmd() *cobra.Command {
 		RunE:  runMcp,
 	}
 
+	cmd.Flags().String("cwd", "", "Working directory (defaults to current directory)")
+
 	return cmd
 }
 
 func runMcp(cmd *cobra.Command, args []string) error {
+	// Change working directory if --cwd is provided
+	cwd, err := cmd.Flags().GetString("cwd")
+	if err != nil {
+		return fmt.Errorf("failed to get cwd flag: %w", err)
+	}
+	if cwd != "" {
+		// Validate that the directory exists
+		info, err := os.Stat(cwd)
+		if err != nil {
+			return fmt.Errorf("failed to access cwd directory %q: %w", cwd, err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("cwd path %q is not a directory", cwd)
+		}
+		// Change to the specified directory
+		if err := os.Chdir(cwd); err != nil {
+			return fmt.Errorf("failed to change to directory %q: %w", cwd, err)
+		}
+	}
+
 	// Find repo root and load config
 	repoRoot, err := repo.FindRoot()
 	if err != nil {
@@ -136,18 +179,38 @@ func runMcp(cmd *cobra.Command, args []string) error {
 	// Register Go To Definition tool
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "codeintelx.goToDefinition",
-		Description: "Find the definition of a symbol. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns definition locations with file path, line, column, kind, and signature.",
+		Description: "Find the definition of a symbol. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns definition locations with file path, line, column, kind, signature, and optionally the code. The language parameter is required.",
 		InputSchema: mustSchema(GoToDefArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GoToDefArgs) (*mcp.CallToolResult, any, error) {
+		// Validate language
+		if err := validateLanguage(args.Language); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
 		var results []indexer.DefinitionResult
 		var err error
 
 		if args.SymbolName != "" {
-			results, err = nav.GoToDefinitionByName(args.SymbolName, args.FilePath)
+			results, err = nav.GoToDefinitionByName(args.SymbolName, args.FilePath, args.Language)
 		} else if args.FilePath != "" && args.Line > 0 {
 			// Convert absolute path to repo-relative if needed
 			relPath := toRepoRelative(args.FilePath, repoRoot)
-			results, err = nav.GoToDefinitionByPosition(relPath, args.Line, args.Column)
+			// Check if file's language matches requested language
+			detectedLang := indexer.DetectLang(relPath)
+			if string(detectedLang) != args.Language {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: no identifier found at %s:%d:%d", relPath, args.Line, args.Column)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+			results, err = nav.GoToDefinitionByPosition(relPath, args.Line, args.Column, args.Language)
 		} else {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -169,27 +232,62 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		}
 
 		text := indexer.FormatDefinitions(results)
+		structuredContent := map[string]interface{}{
+			"definitions": results,
+		}
+
+		// Handle fetchTheCode (default true)
+		fetchTheCode := args.FetchTheCode == nil || *args.FetchTheCode
+		if fetchTheCode && len(results) > 0 {
+			code, err := fetchDefinitionsCode(repoRoot, results)
+			if err != nil {
+				log.Printf("failed to fetch code for definitions: %v", err)
+			} else if code != "" {
+				structuredContent["code"] = code
+			}
+		}
+
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: text},
 			},
-		}, results, nil
+		}, structuredContent, nil
 	})
 
 	// Register Find Usages tool
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "codeintelx.findUsages",
-		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, and context.",
+		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, and context. The language parameter is required. For fetchCodeLinesAround: prefer 0 (or more) for better context; use -1 only when context is limited.",
 		InputSchema: mustSchema(FindUsagesArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args FindUsagesArgs) (*mcp.CallToolResult, any, error) {
+		// Validate language
+		if err := validateLanguage(args.Language); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
 		var results []indexer.UsageResult
 		var err error
 
 		if args.SymbolName != "" {
-			results, err = nav.FindUsagesByName(args.SymbolName, args.FilePath)
+			results, err = nav.FindUsagesByName(args.SymbolName, args.FilePath, args.Language)
 		} else if args.FilePath != "" && args.Line > 0 {
 			relPath := toRepoRelative(args.FilePath, repoRoot)
-			results, err = nav.FindUsagesByPosition(relPath, args.Line, args.Column)
+			// Check if file's language matches requested language
+			detectedLang := indexer.DetectLang(relPath)
+			if string(detectedLang) != args.Language {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: no identifier found at %s:%d:%d", relPath, args.Line, args.Column)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+			results, err = nav.FindUsagesByPosition(relPath, args.Line, args.Column, args.Language)
 		} else {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -211,11 +309,32 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		}
 
 		text := indexer.FormatUsages(results)
+		structuredContent := map[string]interface{}{
+			"usages": results,
+		}
+
+		// Handle fetchCodeLinesAround (default -1, clamped to [-1, 50])
+		linesAround := args.FetchCodeLinesAround
+		if linesAround < -1 {
+			linesAround = -1
+		} else if linesAround > 50 {
+			linesAround = 50
+		}
+
+		if linesAround >= 0 && len(results) > 0 {
+			code, err := fetchUsagesCode(repoRoot, results, linesAround)
+			if err != nil {
+				log.Printf("failed to fetch code for usages: %v", err)
+			} else if code != "" {
+				structuredContent["code"] = code
+			}
+		}
+
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: text},
 			},
-		}, results, nil
+		}, structuredContent, nil
 	})
 
 	// Run server over stdio
@@ -365,6 +484,7 @@ func buildSchema(v interface{}) map[string]interface{} {
 	schema := map[string]interface{}{
 		"type":       "object",
 		"properties": map[string]interface{}{},
+		"required":   []string{"language"},
 	}
 
 	// Use reflect to inspect the struct
@@ -390,7 +510,12 @@ func buildSchema(v interface{}) map[string]interface{} {
 		}
 		props["language"] = map[string]interface{}{
 			"type":        "string",
-			"description": "Optional language filter (go, java, rust, python, typescript, javascript)",
+			"description": "Programming language filter (required): go, java, rust, python, typescript, javascript",
+		}
+		props["fetchTheCode"] = map[string]interface{}{
+			"type":        "boolean",
+			"description": "Whether to include the definition source code in the response (default: true)",
+			"default":     true,
 		}
 	case FindUsagesArgs:
 		props["filePath"] = map[string]interface{}{
@@ -411,7 +536,14 @@ func buildSchema(v interface{}) map[string]interface{} {
 		}
 		props["language"] = map[string]interface{}{
 			"type":        "string",
-			"description": "Optional language filter (go, java, rust, python, typescript, javascript)",
+			"description": "Programming language filter (required): go, java, rust, python, typescript, javascript",
+		}
+		props["fetchCodeLinesAround"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Number of context lines around each usage: -1=no code, 0=usage only, N>0=N lines before+after (default: -1, max: 50). Prefer 0+ for better context.",
+			"default":     -1,
+			"minimum":     -1,
+			"maximum":     50,
 		}
 	}
 

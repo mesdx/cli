@@ -19,18 +19,18 @@ type Location struct {
 
 // DefinitionResult is the output of a go-to-definition query.
 type DefinitionResult struct {
-	Name      string `json:"name"`
-	Kind      string `json:"kind"`
-	Container string `json:"container,omitempty"`
-	Signature string `json:"signature,omitempty"`
+	Name      string   `json:"name"`
+	Kind      string   `json:"kind"`
+	Container string   `json:"container,omitempty"`
+	Signature string   `json:"signature,omitempty"`
 	Location  Location `json:"location"`
 }
 
 // UsageResult is the output of a find-usages query.
 type UsageResult struct {
-	Name             string `json:"name"`
-	Kind             string `json:"kind"`
-	ContextContainer string `json:"contextContainer,omitempty"`
+	Name             string   `json:"name"`
+	Kind             string   `json:"kind"`
+	ContextContainer string   `json:"contextContainer,omitempty"`
 	Location         Location `json:"location"`
 }
 
@@ -42,18 +42,19 @@ type Navigator struct {
 
 // GoToDefinitionByName finds symbol definitions matching the given name.
 // An optional filterFile (repo-relative path) ranks results from that file higher.
-func (n *Navigator) GoToDefinitionByName(name string, filterFile string) ([]DefinitionResult, error) {
+// The lang parameter filters results to files of the specified language.
+func (n *Navigator) GoToDefinitionByName(name string, filterFile string, lang string) ([]DefinitionResult, error) {
 	query := `
 		SELECT s.name, s.kind, s.container_name, s.signature,
 		       f.path, s.start_line, s.start_col, s.end_line, s.end_col
 		FROM symbols s
 		JOIN files f ON s.file_id = f.id
-		WHERE f.project_id = ? AND s.name = ?
+		WHERE f.project_id = ? AND s.name = ? AND f.lang = ?
 		ORDER BY
 			CASE WHEN f.path = ? THEN 0 ELSE 1 END,
 			s.kind ASC
 	`
-	rows, err := n.DB.Query(query, n.ProjectID, name, filterFile)
+	rows, err := n.DB.Query(query, n.ProjectID, name, lang, filterFile)
 	if err != nil {
 		return nil, fmt.Errorf("query definitions: %w", err)
 	}
@@ -76,7 +77,8 @@ func (n *Navigator) GoToDefinitionByName(name string, filterFile string) ([]Defi
 
 // GoToDefinitionByPosition resolves the identifier at the given cursor position,
 // then looks up its definition.
-func (n *Navigator) GoToDefinitionByPosition(filePath string, line, col int) ([]DefinitionResult, error) {
+// The lang parameter filters results to files of the specified language.
+func (n *Navigator) GoToDefinitionByPosition(filePath string, line, col int, lang string) ([]DefinitionResult, error) {
 	// First, find the symbol/ref name at the cursor position.
 	name, err := n.identifierAt(filePath, line, col)
 	if err != nil {
@@ -85,22 +87,23 @@ func (n *Navigator) GoToDefinitionByPosition(filePath string, line, col int) ([]
 	if name == "" {
 		return nil, fmt.Errorf("no identifier found at %s:%d:%d", filePath, line, col)
 	}
-	return n.GoToDefinitionByName(name, filePath)
+	return n.GoToDefinitionByName(name, filePath, lang)
 }
 
 // FindUsagesByName finds all references to the given name across the project.
-func (n *Navigator) FindUsagesByName(name string, filterFile string) ([]UsageResult, error) {
+// The lang parameter filters results to files of the specified language.
+func (n *Navigator) FindUsagesByName(name string, filterFile string, lang string) ([]UsageResult, error) {
 	query := `
 		SELECT r.name, r.kind, r.context_container,
 		       f.path, r.start_line, r.start_col, r.end_line, r.end_col
 		FROM refs r
 		JOIN files f ON r.file_id = f.id
-		WHERE f.project_id = ? AND r.name = ?
+		WHERE f.project_id = ? AND r.name = ? AND f.lang = ?
 		ORDER BY
 			CASE WHEN f.path = ? THEN 0 ELSE 1 END,
 			f.path ASC, r.start_line ASC
 	`
-	rows, err := n.DB.Query(query, n.ProjectID, name, filterFile)
+	rows, err := n.DB.Query(query, n.ProjectID, name, lang, filterFile)
 	if err != nil {
 		return nil, fmt.Errorf("query usages: %w", err)
 	}
@@ -123,7 +126,8 @@ func (n *Navigator) FindUsagesByName(name string, filterFile string) ([]UsageRes
 
 // FindUsagesByPosition resolves the identifier at the given cursor position,
 // then looks up its usages.
-func (n *Navigator) FindUsagesByPosition(filePath string, line, col int) ([]UsageResult, error) {
+// The lang parameter filters results to files of the specified language.
+func (n *Navigator) FindUsagesByPosition(filePath string, line, col int, lang string) ([]UsageResult, error) {
 	name, err := n.identifierAt(filePath, line, col)
 	if err != nil {
 		return nil, err
@@ -131,7 +135,7 @@ func (n *Navigator) FindUsagesByPosition(filePath string, line, col int) ([]Usag
 	if name == "" {
 		return nil, fmt.Errorf("no identifier found at %s:%d:%d", filePath, line, col)
 	}
-	return n.FindUsagesByName(name, filePath)
+	return n.FindUsagesByName(name, filePath, lang)
 }
 
 // identifierAt looks up the identifier name at the given file+line+col from
