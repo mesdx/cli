@@ -15,3 +15,7 @@
 {"jsonrpc":"2.0","id":102,"method":"tools/call","params":{"name":"codeintelx.goToDefinition","arguments":{"language":"go"}}}
 {"jsonrpc":"2.0","id":103,"method":"tools/call","params":{"name":"codeintelx.goToDefinition","arguments":{"filePath":"README.md","line":1,"column":0,"language":"go"}}}
 {"jsonrpc":"2.0","id":104,"method":"tools/call","params":{"name":"codeintelx.findUsages","arguments":{"symbolName":"validateLanguage","language":"go","fetchCodeLinesAround":100}}}
+{"jsonrpc":"2.0","id":200,"method":"tools/call","params":{"name":"codeintelx.dependencyGraph","arguments":{"symbolName":"Navigator","language":"go"}}}
+{"jsonrpc":"2.0","id":201,"method":"tools/call","params":{"name":"codeintelx.dependencyGraph","arguments":{"symbolName":"validateLanguage","language":"go","maxDepth":2}}}
+{"jsonrpc":"2.0","id":202,"method":"tools/call","params":{"name":"codeintelx.dependencyGraph","arguments":{"filePath":"internal/indexer/navigation.go","line":38,"column":5,"language":"go"}}}
+{"jsonrpc":"2.0","id":203,"method":"tools/call","params":{"name":"codeintelx.dependencyGraph","arguments":{"symbolName":"Navigator","language":"go","minScore":0.5,"maxUsages":10}}}

@@ -59,6 +59,18 @@ type FindUsagesArgs struct {
 	FetchCodeLinesAround int    `json:"fetchCodeLinesAround,omitempty"`
 }
 
+// DependencyGraphArgs is the input for the dependencyGraph MCP tool.
+type DependencyGraphArgs struct {
+	FilePath   string  `json:"filePath,omitempty"`
+	Line       int     `json:"line,omitempty"`
+	Column     int     `json:"column,omitempty"`
+	SymbolName string  `json:"symbolName,omitempty"`
+	Language   string  `json:"language,omitempty"`
+	MaxDepth   int     `json:"maxDepth,omitempty"`
+	MinScore   float64 `json:"minScore,omitempty"`
+	MaxUsages  int     `json:"maxUsages,omitempty"`
+}
+
 func newMcpCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
@@ -257,7 +269,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 	// Register Find Usages tool
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "codeintelx.findUsages",
-		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, and context. The language parameter is required. For fetchCodeLinesAround: prefer 0 (or more) for better context; use -1 only when context is limited.",
+		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, context, and a dependencyScore (0-1) indicating confidence that the usage truly depends on the intended definition. Results are sorted by score (descending) while keeping adjacent usages grouped. The language parameter is required. For fetchCodeLinesAround: prefer 0 (or more) for better context; use -1 only when context is limited.",
 		InputSchema: mustSchema(FindUsagesArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args FindUsagesArgs) (*mcp.CallToolResult, any, error) {
 		// Validate language
@@ -272,11 +284,17 @@ func runMcp(cmd *cobra.Command, args []string) error {
 
 		var results []indexer.UsageResult
 		var err error
+		var symbolName string
+		var filterFile string
+		var primaryDef *indexer.DefinitionResult
 
 		if args.SymbolName != "" {
+			symbolName = args.SymbolName
+			filterFile = args.FilePath
 			results, err = nav.FindUsagesByName(args.SymbolName, args.FilePath, args.Language)
 		} else if args.FilePath != "" && args.Line > 0 {
 			relPath := toRepoRelative(args.FilePath, repoRoot)
+			filterFile = relPath
 			// Check if file's language matches requested language
 			detectedLang := indexer.DetectLang(relPath)
 			if string(detectedLang) != args.Language {
@@ -288,6 +306,14 @@ func runMcp(cmd *cobra.Command, args []string) error {
 				}, nil, nil
 			}
 			results, err = nav.FindUsagesByPosition(relPath, args.Line, args.Column, args.Language)
+			// Resolve primary definition for cursor-based lookup.
+			if err == nil && len(results) > 0 {
+				symbolName = results[0].Name
+				defs, defErr := nav.GoToDefinitionByPosition(relPath, args.Line, args.Column, args.Language)
+				if defErr == nil && len(defs) > 0 {
+					primaryDef = &defs[0]
+				}
+			}
 		} else {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -308,9 +334,32 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
-		text := indexer.FormatUsages(results)
+		// Look up candidate definitions for scoring.
+		candidates, _ := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
+
+		// If no primary def was set (name-based lookup), use the top candidate.
+		if primaryDef == nil && len(candidates) > 0 {
+			primaryDef = &candidates[0]
+		}
+
+		// Score usages against candidate definitions.
+		scored := indexer.ScoreUsages(results, candidates, primaryDef, repoRoot)
+
+		// Group adjacent usages and sort by score descending.
+		scored = indexer.GroupAndSortUsages(scored, 3)
+
+		// Write scores back to UsageResult for formatting/output.
+		scoredResults := make([]indexer.UsageResult, len(scored))
+		for i, su := range scored {
+			scoredResults[i] = su.UsageResult
+			scoredResults[i].DependencyScore = su.DependencyScore
+		}
+
+		text := indexer.FormatScoredUsages(scored)
 		structuredContent := map[string]interface{}{
-			"usages": results,
+			"usages":               scored,
+			"primaryDefinition":    primaryDef,
+			"definitionCandidates": candidates,
 		}
 
 		// Handle fetchCodeLinesAround (default -1, clamped to [-1, 50])
@@ -321,8 +370,8 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			linesAround = 50
 		}
 
-		if linesAround >= 0 && len(results) > 0 {
-			code, err := fetchUsagesCode(repoRoot, results, linesAround)
+		if linesAround >= 0 && len(scoredResults) > 0 {
+			code, err := fetchUsagesCode(repoRoot, scoredResults, linesAround)
 			if err != nil {
 				log.Printf("failed to fetch code for usages: %v", err)
 			} else if code != "" {
@@ -335,6 +384,120 @@ func runMcp(cmd *cobra.Command, args []string) error {
 				&mcp.TextContent{Text: text},
 			},
 		}, structuredContent, nil
+	})
+
+	// Register Dependency Graph tool
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "codeintelx.dependencyGraph",
+		Description: "Extract a dependency graph for a symbol, showing inbound usages (who depends on it) and outbound dependencies (what it depends on). Returns a symbol-level graph, a collapsed file-level graph, scored usages, and candidate definitions. Use this for risk analysis when renaming or removing a symbol. The language parameter is required.",
+		InputSchema: mustSchema(DependencyGraphArgs{}),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args DependencyGraphArgs) (*mcp.CallToolResult, any, error) {
+		// Validate language
+		if err := validateLanguage(args.Language); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
+		// Resolve symbol name
+		var symbolName string
+		var filterFile string
+		var primaryDef *indexer.DefinitionResult
+
+		if args.SymbolName != "" {
+			symbolName = args.SymbolName
+			filterFile = args.FilePath
+		} else if args.FilePath != "" && args.Line > 0 {
+			relPath := toRepoRelative(args.FilePath, repoRoot)
+			filterFile = relPath
+			detectedLang := indexer.DetectLang(relPath)
+			if string(detectedLang) != args.Language {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: no identifier found at %s:%d:%d", relPath, args.Line, args.Column)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+			defs, err := nav.GoToDefinitionByPosition(relPath, args.Line, args.Column, args.Language)
+			if err != nil || len(defs) == 0 {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: no definition found at %s:%d:%d", relPath, args.Line, args.Column)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+			symbolName = defs[0].Name
+			primaryDef = &defs[0]
+		} else {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{
+						Text: "Error: provide either symbolName, or filePath + line + column",
+					},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
+		// Look up candidate definitions
+		candidates, err := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
+		if primaryDef == nil && len(candidates) > 0 {
+			primaryDef = &candidates[0]
+		}
+
+		// Apply defaults and caps
+		maxDepth := args.MaxDepth
+		if maxDepth <= 0 {
+			maxDepth = 1
+		}
+		if maxDepth > 2 {
+			maxDepth = 2
+		}
+		minScore := args.MinScore
+		if minScore <= 0 {
+			minScore = 0.2
+		}
+		maxUsages := args.MaxUsages
+		if maxUsages <= 0 {
+			maxUsages = 500
+		}
+
+		// Build the dependency graph
+		graph, err := indexer.BuildDependencyGraph(
+			nav, primaryDef, candidates, args.Language,
+			repoRoot, maxDepth, minScore, maxUsages,
+		)
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
+		// Format human-readable summary
+		text := formatDependencyGraph(graph)
+
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: text},
+			},
+		}, graph, nil
 	})
 
 	// Run server over stdio
@@ -459,6 +622,238 @@ func initMCPLog(codeintelxDir string) error {
 	return nil
 }
 
+// formatDependencyGraph formats a dependency graph as Mermaid syntax.
+func formatDependencyGraph(g *indexer.DependencyGraph) string {
+	var b strings.Builder
+
+	// Summary section
+	if g.PrimaryDefinition != nil {
+		fmt.Fprintf(&b, "# Dependency Graph for %s (%s)\n\n", g.PrimaryDefinition.Name, g.PrimaryDefinition.Kind)
+		fmt.Fprintf(&b, "**Location**: %s:%d:%d\n", g.PrimaryDefinition.Location.Path,
+			g.PrimaryDefinition.Location.StartLine, g.PrimaryDefinition.Location.StartCol)
+		if g.PrimaryDefinition.Signature != "" {
+			fmt.Fprintf(&b, "**Signature**: `%s`\n", g.PrimaryDefinition.Signature)
+		}
+	} else {
+		b.WriteString("# Dependency Graph\n\n")
+	}
+
+	fmt.Fprintf(&b, "\n**Definition Candidates**: %d\n", len(g.DefinitionCandidates))
+	for i, d := range g.DefinitionCandidates {
+		if i >= 5 {
+			fmt.Fprintf(&b, "- ... and %d more\n", len(g.DefinitionCandidates)-5)
+			break
+		}
+		fmt.Fprintf(&b, "- [%d] %s (%s) at %s:%d\n", i+1, d.Name, d.Kind,
+			d.Location.Path, d.Location.StartLine)
+	}
+
+	// Symbol graph stats
+	inboundCount := 0
+	outboundCount := 0
+	for _, e := range g.SymbolGraph.Edges {
+		if e.Kind == "inbound" {
+			inboundCount++
+		} else {
+			outboundCount++
+		}
+	}
+
+	// Mermaid graph for file dependencies
+	if len(g.FileGraph) > 0 {
+		b.WriteString("\n## File Dependency Graph\n\n")
+		b.WriteString("```mermaid\n")
+		b.WriteString("graph LR\n")
+
+		// Sanitize file paths for Mermaid node IDs
+		fileToID := make(map[string]string)
+		idCounter := 0
+		getFileID := func(path string) string {
+			if id, ok := fileToID[path]; ok {
+				return id
+			}
+			id := fmt.Sprintf("F%d", idCounter)
+			idCounter++
+			fileToID[path] = id
+			return id
+		}
+
+		// Define nodes with shortened labels
+		nodesDefined := make(map[string]bool)
+		for _, fe := range g.FileGraph {
+			fromID := getFileID(fe.From)
+			toID := getFileID(fe.To)
+			if !nodesDefined[fromID] {
+				fmt.Fprintf(&b, "    %s[\"%s\"]\n", fromID, shortenPath(fe.From, 40))
+				nodesDefined[fromID] = true
+			}
+			if !nodesDefined[toID] {
+				fmt.Fprintf(&b, "    %s[\"%s\"]\n", toID, shortenPath(fe.To, 40))
+				nodesDefined[toID] = true
+			}
+		}
+
+		// Draw edges with labels
+		for _, fe := range g.FileGraph {
+			fromID := getFileID(fe.From)
+			toID := getFileID(fe.To)
+			fmt.Fprintf(&b, "    %s -->|\"%.2f (%d)\"| %s\n", fromID, fe.Score, fe.Count, toID)
+		}
+
+		b.WriteString("```\n")
+	}
+
+	// Mermaid graph for symbol dependencies (top N only for readability)
+	if len(g.SymbolGraph.Edges) > 0 {
+		b.WriteString("\n## Symbol Dependency Graph\n\n")
+		fmt.Fprintf(&b, "**Nodes**: %d | **Edges**: %d (%d inbound, %d outbound)\n\n",
+			len(g.SymbolGraph.Nodes), len(g.SymbolGraph.Edges), inboundCount, outboundCount)
+
+		b.WriteString("```mermaid\n")
+		b.WriteString("graph TD\n")
+
+		// Define primary node
+		if g.PrimaryDefinition != nil {
+			primaryID := sanitizeMermaidID(g.PrimaryDefinition.Name + "@" + g.PrimaryDefinition.Location.Path)
+			fmt.Fprintf(&b, "    %s[[\"%s (%s)\"]]\n", primaryID, g.PrimaryDefinition.Name, g.PrimaryDefinition.Kind)
+			fmt.Fprintf(&b, "    style %s fill:#f9f,stroke:#333,stroke-width:3px\n", primaryID)
+
+			// Inbound edges (limit to top 15 by score)
+			inboundEdges := []indexer.DepGraphEdge{}
+			for _, e := range g.SymbolGraph.Edges {
+				if e.Kind == "inbound" {
+					inboundEdges = append(inboundEdges, e)
+				}
+			}
+			// Sort by score descending
+			for i := 0; i < len(inboundEdges); i++ {
+				for j := i + 1; j < len(inboundEdges); j++ {
+					if inboundEdges[j].Score > inboundEdges[i].Score {
+						inboundEdges[i], inboundEdges[j] = inboundEdges[j], inboundEdges[i]
+					}
+				}
+			}
+			displayLimit := 15
+			for i, e := range inboundEdges {
+				if i >= displayLimit {
+					if len(inboundEdges) > displayLimit {
+						moreID := sanitizeMermaidID("more_inbound")
+						fmt.Fprintf(&b, "    %s[\"... %d more files\"]\n", moreID, len(inboundEdges)-displayLimit)
+						fmt.Fprintf(&b, "    %s -.-> %s\n", moreID, primaryID)
+					}
+					break
+				}
+				fromID := sanitizeMermaidID(e.FilePath)
+				fmt.Fprintf(&b, "    %s[\"%s\"]\n", fromID, shortenPath(e.FilePath, 30))
+				fmt.Fprintf(&b, "    %s -->|\"%.2f\"| %s\n", fromID, e.Score, primaryID)
+			}
+
+			// Outbound edges (limit to top 15)
+			outboundEdges := []indexer.DepGraphEdge{}
+			for _, e := range g.SymbolGraph.Edges {
+				if e.Kind == "outbound" {
+					outboundEdges = append(outboundEdges, e)
+				}
+			}
+			for i, e := range outboundEdges {
+				if i >= displayLimit {
+					if len(outboundEdges) > displayLimit {
+						moreID := sanitizeMermaidID("more_outbound")
+						fmt.Fprintf(&b, "    %s[\"... %d more symbols\"]\n", moreID, len(outboundEdges)-displayLimit)
+						fmt.Fprintf(&b, "    %s -.-> %s\n", primaryID, moreID)
+					}
+					break
+				}
+				// Parse To as "path:name:line"
+				toID := sanitizeMermaidID(e.To)
+				// Extract symbol name from node ID
+				symbolName := extractSymbolFromNodeID(e.To)
+				fmt.Fprintf(&b, "    %s[\"%s\"]\n", toID, symbolName)
+				fmt.Fprintf(&b, "    %s -->|\"%.2f\"| %s\n", primaryID, e.Score, toID)
+			}
+		}
+
+		b.WriteString("```\n")
+	}
+
+	// Scored usages summary
+	if len(g.Usages) > 0 {
+		b.WriteString("\n## Top Scored Usages\n\n")
+		fmt.Fprintf(&b, "**Total**: %d usages\n\n", len(g.Usages))
+		for i, u := range g.Usages {
+			if i >= 20 {
+				fmt.Fprintf(&b, "\n*... and %d more usages*\n", len(g.Usages)-20)
+				break
+			}
+			fmt.Fprintf(&b, "%d. **%s** at `%s:%d` (score: %.4f)\n", i+1, u.Name,
+				u.Location.Path, u.Location.StartLine, u.DependencyScore)
+			if u.ContextContainer != "" {
+				fmt.Fprintf(&b, "   - Context: %s\n", u.ContextContainer)
+			}
+		}
+	}
+
+	return b.String()
+}
+
+// shortenPath shortens a file path for display (keeps start and end if too long).
+func shortenPath(path string, maxLen int) string {
+	if len(path) <= maxLen {
+		return path
+	}
+	// Keep first 15 and last 20 chars with "..." in between
+	start := maxLen / 3
+	end := maxLen - start - 3
+	if end <= 0 {
+		return path[:maxLen]
+	}
+	return path[:start] + "..." + path[len(path)-end:]
+}
+
+// sanitizeMermaidID converts a string into a valid Mermaid node ID.
+func sanitizeMermaidID(s string) string {
+	// Replace special chars with underscores
+	result := make([]byte, 0, len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			result = append(result, c)
+		} else {
+			result = append(result, '_')
+		}
+	}
+	id := string(result)
+	// Ensure it starts with a letter
+	if len(id) > 0 && id[0] >= '0' && id[0] <= '9' {
+		id = "n" + id
+	}
+	if len(id) == 0 {
+		id = "node"
+	}
+	return id
+}
+
+// extractSymbolFromNodeID extracts the symbol name from a node ID "path:name:line".
+func extractSymbolFromNodeID(nodeID string) string {
+	// Find the last two colons
+	lastColon := -1
+	secondLastColon := -1
+	for i := len(nodeID) - 1; i >= 0; i-- {
+		if nodeID[i] == ':' {
+			if lastColon == -1 {
+				lastColon = i
+			} else if secondLastColon == -1 {
+				secondLastColon = i
+				break
+			}
+		}
+	}
+	if secondLastColon >= 0 && lastColon > secondLastColon {
+		return nodeID[secondLastColon+1 : lastColon]
+	}
+	return nodeID
+}
+
 // toRepoRelative converts an absolute path to a repo-relative path.
 func toRepoRelative(path, repoRoot string) string {
 	if filepath.IsAbs(path) {
@@ -544,6 +939,48 @@ func buildSchema(v interface{}) map[string]interface{} {
 			"default":     -1,
 			"minimum":     -1,
 			"maximum":     50,
+		}
+	case DependencyGraphArgs:
+		props["filePath"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Path to the source file (absolute or repo-relative)",
+		}
+		props["line"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "1-based line number of the cursor position",
+		}
+		props["column"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "0-based column number of the cursor position",
+		}
+		props["symbolName"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Name of the symbol to look up (alternative to cursor-based lookup)",
+		}
+		props["language"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Programming language filter (required): go, java, rust, python, typescript, javascript",
+		}
+		props["maxDepth"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Maximum depth for outbound dependency traversal (default: 1, max: 2)",
+			"default":     1,
+			"minimum":     0,
+			"maximum":     2,
+		}
+		props["minScore"] = map[string]interface{}{
+			"type":        "number",
+			"description": "Minimum dependency score threshold for including usages (default: 0.2)",
+			"default":     0.2,
+			"minimum":     0,
+			"maximum":     1,
+		}
+		props["maxUsages"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Maximum number of usages to include (default: 500)",
+			"default":     500,
+			"minimum":     1,
+			"maximum":     5000,
 		}
 	}
 

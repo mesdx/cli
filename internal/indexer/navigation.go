@@ -32,6 +32,7 @@ type UsageResult struct {
 	Kind             string   `json:"kind"`
 	ContextContainer string   `json:"contextContainer,omitempty"`
 	Location         Location `json:"location"`
+	DependencyScore  float64  `json:"dependencyScore,omitempty"`
 }
 
 // Navigator provides go-to-definition and find-usages queries.
@@ -138,6 +139,39 @@ func (n *Navigator) FindUsagesByPosition(filePath string, line, col int, lang st
 	return n.FindUsagesByName(name, filePath, lang)
 }
 
+// RefsInFileRange returns all references in the given file within the
+// specified line range [startLine, endLine] (1-based, inclusive).
+func (n *Navigator) RefsInFileRange(filePath string, startLine, endLine int, lang string) ([]UsageResult, error) {
+	query := `
+		SELECT r.name, r.kind, r.context_container,
+		       f.path, r.start_line, r.start_col, r.end_line, r.end_col
+		FROM refs r
+		JOIN files f ON r.file_id = f.id
+		WHERE f.project_id = ? AND f.path = ? AND f.lang = ?
+		  AND r.start_line >= ? AND r.start_line <= ?
+		ORDER BY r.start_line ASC, r.start_col ASC
+	`
+	rows, err := n.DB.Query(query, n.ProjectID, filePath, lang, startLine, endLine)
+	if err != nil {
+		return nil, fmt.Errorf("query refs in range: %w", err)
+	}
+	defer rows.Close()
+
+	var results []UsageResult
+	for rows.Next() {
+		var r UsageResult
+		var kindInt int
+		if err := rows.Scan(&r.Name, &kindInt, &r.ContextContainer,
+			&r.Location.Path, &r.Location.StartLine, &r.Location.StartCol,
+			&r.Location.EndLine, &r.Location.EndCol); err != nil {
+			return nil, err
+		}
+		r.Kind = symbols.RefKind(kindInt).String()
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}
+
 // identifierAt looks up the identifier name at the given file+line+col from
 // both the symbols and refs tables.
 func (n *Navigator) identifierAt(filePath string, line, col int) (string, error) {
@@ -209,6 +243,7 @@ func FormatDefinitions(results []DefinitionResult) string {
 }
 
 // FormatUsages formats usage results as a human-readable string for MCP.
+// If usages carry DependencyScore > 0, the score is printed under each entry.
 func FormatUsages(results []UsageResult) string {
 	if len(results) == 0 {
 		return "No usages found."
@@ -223,6 +258,37 @@ func FormatUsages(results []UsageResult) string {
 			fmt.Fprintf(&b, " (in %s)", r.ContextContainer)
 		}
 		fmt.Fprintf(&b, "\n    %s:%d:%d", r.Location.Path, r.Location.StartLine, r.Location.StartCol)
+		if r.DependencyScore > 0 {
+			fmt.Fprintf(&b, "\n    score: %.4f", r.DependencyScore)
+		}
+	}
+	return b.String()
+}
+
+// FormatScoredUsages formats scored usage results with dependency scores.
+func FormatScoredUsages(results []ScoredUsage) string {
+	if len(results) == 0 {
+		return "No usages found."
+	}
+	var b strings.Builder
+	for i, r := range results {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "[%d] %s", i+1, r.Name)
+		if r.ContextContainer != "" {
+			fmt.Fprintf(&b, " (in %s)", r.ContextContainer)
+		}
+		fmt.Fprintf(&b, "\n    %s:%d:%d", r.Location.Path, r.Location.StartLine, r.Location.StartCol)
+		fmt.Fprintf(&b, "\n    score: %.4f", r.DependencyScore)
+		if r.BestDefinition != nil {
+			fmt.Fprintf(&b, " → %s (%s) at %s:%d",
+				r.BestDefinition.Name,
+				r.BestDefinition.Kind,
+				r.BestDefinition.Location.Path,
+				r.BestDefinition.Location.StartLine,
+			)
+		}
 	}
 	return b.String()
 }
