@@ -7,7 +7,7 @@ import (
 
 // Version is the version of mesdx CLI.
 // Update this constant manually on every release.
-const Version = "v0.1.3"
+const Version = "v0.2.0"
 
 // NewRootCmd creates the root command for mesdx
 func NewRootCmd() *cobra.Command {
