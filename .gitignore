@@ -1,12 +1,12 @@
 # Binaries
-/codeintelx
-/codeintelx.exe
+/mesdx
+/mesdx.exe
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-codeintelx-*
+mesdx-*
 
 # Test binary, built with `go test -c`
 *.test
@@ -76,5 +76,6 @@ bin/
 .env.local
 .env.*.local
 
-# codeintelx
-.codeintelx/
+
+# mesdx
+.mesdx/

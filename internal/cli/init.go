@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,10 +194,176 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cmd.Printf("%s Warning: failed to update ignore files: %v\n", infoStyle.Render("!"), err)
 	}
 
+	// Prompt to create/update CLAUDE.md
+	if err := promptAndUpdateClaudeMd(cmd, repoRoot); err != nil {
+		// Non-fatal, just log
+		cmd.Printf("%s Warning: failed to create/update CLAUDE.md: %v\n", infoStyle.Render("!"), err)
+	}
+
 	cmd.Printf("\n%s Initialization complete!\n", successStyle.Render("✓"))
 	cmd.Println("Next steps:")
 	cmd.Println("  - Run 'mesdx mcp' to start the MCP server")
 	cmd.Println("  - Configure Claude Code to use this MCP server")
 
 	return nil
+}
+
+const (
+	claudeMdBeginMarker = "<!-- mesdx:begin -->"
+	claudeMdEndMarker   = "<!-- mesdx:end -->"
+)
+
+// promptAndUpdateClaudeMd prompts the user to create/update CLAUDE.md with MesDX guidance.
+func promptAndUpdateClaudeMd(cmd *cobra.Command, repoRoot string) error {
+	claudeMdPath := filepath.Join(repoRoot, "CLAUDE.md")
+
+	// Check if CLAUDE.md exists and has MesDX markers
+	existingContent := ""
+	_, err := os.Stat(claudeMdPath)
+	claudeMdExists := err == nil
+	hasMesdxSection := false
+
+	if claudeMdExists {
+		content, err := os.ReadFile(claudeMdPath)
+		if err == nil {
+			existingContent = string(content)
+			hasMesdxSection = strings.Contains(existingContent, claudeMdBeginMarker)
+		}
+	}
+
+	// Prompt user
+	var shouldUpdate bool
+	promptText := "Add MesDX MCP guidance to CLAUDE.md?"
+	if hasMesdxSection {
+		promptText = "Update MesDX MCP guidance in CLAUDE.md?"
+	}
+
+	confirmForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title(promptText).
+				Description("This will add/update a managed section with setup instructions and tool overview.").
+				Value(&shouldUpdate),
+		),
+	)
+
+	if err := confirmForm.Run(); err != nil {
+		return fmt.Errorf("prompt failed: %w", err)
+	}
+
+	if !shouldUpdate {
+		return nil
+	}
+
+	// Generate or update CLAUDE.md
+	if err := updateClaudeMd(claudeMdPath, repoRoot, claudeMdExists); err != nil {
+		return err
+	}
+
+	if hasMesdxSection {
+		cmd.Printf("%s Updated MesDX guidance in CLAUDE.md\n", successStyle.Render("✓"))
+	} else if claudeMdExists {
+		cmd.Printf("%s Added MesDX guidance to CLAUDE.md\n", successStyle.Render("✓"))
+	} else {
+		cmd.Printf("%s Created CLAUDE.md with MesDX guidance\n", successStyle.Render("✓"))
+	}
+
+	return nil
+}
+
+// updateClaudeMd creates or updates CLAUDE.md with the managed MesDX section.
+func updateClaudeMd(path string, repoRoot string, exists bool) error {
+	managedContent := generateMesdxGuidance(repoRoot)
+
+	if !exists {
+		// Create new file with only the managed section
+		content := claudeMdBeginMarker + "\n" + managedContent + "\n" + claudeMdEndMarker + "\n"
+		return os.WriteFile(path, []byte(content), 0644)
+	}
+
+	// Update existing file: replace managed section or append it
+	existing, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read existing CLAUDE.md: %w", err)
+	}
+
+	updated := updateManagedSection(string(existing), managedContent)
+	return os.WriteFile(path, []byte(updated), 0644)
+}
+
+// updateManagedSection replaces or appends the managed section in existing content.
+func updateManagedSection(existing string, managedContent string) string {
+	beginIdx := strings.Index(existing, claudeMdBeginMarker)
+	endIdx := strings.Index(existing, claudeMdEndMarker)
+
+	if beginIdx >= 0 && endIdx > beginIdx {
+		// Replace existing managed section
+		before := existing[:beginIdx]
+		after := existing[endIdx+len(claudeMdEndMarker):]
+		return before + claudeMdBeginMarker + "\n" + managedContent + "\n" + claudeMdEndMarker + after
+	}
+
+	// Append managed section
+	var buf bytes.Buffer
+	buf.WriteString(existing)
+	if !strings.HasSuffix(existing, "\n") {
+		buf.WriteString("\n")
+	}
+	buf.WriteString("\n")
+	buf.WriteString(claudeMdBeginMarker)
+	buf.WriteString("\n")
+	buf.WriteString(managedContent)
+	buf.WriteString("\n")
+	buf.WriteString(claudeMdEndMarker)
+	buf.WriteString("\n")
+	return buf.String()
+}
+
+// generateMesdxGuidance generates the managed MesDX guidance content.
+func generateMesdxGuidance(repoRoot string) string {
+	_ = repoRoot // Not used in template, but kept for future extensibility
+	return `## MesDX Code Intelligence
+
+MesDX provides precise, local-first code navigation and analysis via the Model Context Protocol (MCP).
+
+### Setup
+
+Add MesDX to Claude Code with this command:
+
+` + "```bash" + `
+claude mcp add mesdx --transport stdio -- mesdx mcp --cwd <REPO_ROOT>
+` + "```" + `
+
+Replace ` + "`<REPO_ROOT>`" + ` with the absolute path to this repository.
+
+
+### Available Tools
+
+**Navigation & Definition Lookup**
+- ` + "`mesdx.projectInfo`" + ` — Get repo root, source roots, and database path
+- ` + "`mesdx.goToDefinition`" + ` — Find symbol definitions by cursor position or name
+- ` + "`mesdx.findUsages`" + ` — Find all references to a symbol with dependency scoring
+
+**Impact Analysis**
+- ` + "`mesdx.dependencyGraph`" + ` — Analyze inbound/outbound dependencies for refactor risk assessment
+
+**Memory (Persistent Context)**
+- ` + "`mesdx.memoryAppend`" + ` — Create project or file-scoped markdown notes
+- ` + "`mesdx.memoryRead`" + ` — Read or list memory elements
+- ` + "`mesdx.memorySearch`" + ` — Full-text search across memories
+- ` + "`mesdx.memoryUpdate`" + ` — Update existing memories
+- ` + "`mesdx.memoryGrepReplace`" + ` — Regex find-and-replace in memories
+- ` + "`mesdx.memoryDelete`" + ` — Soft-delete memories
+
+### Workflow Skills
+
+For detailed step-by-step guidance on specific workflows, use MCP prompts:
+
+- ` + "`mesdx.skill.bugfix`" + ` — Navigate, analyze, and document bug fixes
+- ` + "`mesdx.skill.refactoring`" + ` — Safe refactoring with impact analysis
+- ` + "`mesdx.skill.feature_development`" + ` — Plan and implement new features
+- ` + "`mesdx.skill.security_analysis`" + ` — Find and document security issues
+
+**Supported languages:** Go, Java, Rust, Python, TypeScript, JavaScript
+`
 }

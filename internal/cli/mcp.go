@@ -590,6 +590,9 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		registerMemoryTools(server, memMgr)
 	}
 
+	// Register skill prompts
+	registerSkillPrompts(server, repoRoot, memMgr != nil)
+
 	// Run server over stdio
 	return server.Run(context.Background(), &mcp.StdioTransport{})
 }
