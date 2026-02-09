@@ -13,7 +13,7 @@ func DiscoverAllDirs(repoRoot string) ([]string, error) {
 	var dirs []string
 	excluded := map[string]bool{
 		".git":            true,
-		codeintelxDirName: true,
+		mesdxDirName: true,
 		"node_modules":    true,
 		".venv":           true,
 		"venv":            true,

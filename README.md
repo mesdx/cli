@@ -1,47 +1,47 @@
 <div align="center">
-  <img src="icon.png" alt="CodeIntelX" width="128" height="128">
-  <h1>CodeIntelX</h1>
+  <img src="icon.png" alt="MesDX" width="128" height="128">
+  <h1>MesDX</h1>
 </div>
 
-CodeIntelX is a **local-first code intelligence MCP server** that indexes your repository and exposes reliable, structured navigation tools to agents like **Claude Code** (and other MCP clients). 🔍🧭
+MesDX is a **local-first code intelligence MCP server** that indexes your repository and exposes reliable, structured navigation tools to agents like **Claude Code** (and other MCP clients). 🔍🧭
 
-## Why CodeIntelX (MCP)?
+## Why MesDX (MCP)?
 
 - **🔎 Precise symbol navigation**: resolve definitions/usages from your *actual codebase* instead of guessing.
 - **🧩 Impact analysis**: inspect inbound/outbound dependencies for safer refactors.
 - **⚡ Always up to date**: runs a background file watcher and reconciles indexes as files change.
-- **🗂️ Repo-scoped & local**: stores data in your repo’s `.codeintelx/` (no system-wide daemon, no sudo required).
+- **🗂️ Repo-scoped & local**: stores data in your repo’s `.mesdx/` (no system-wide daemon, no sudo required).
 - **🧠 Long-term “memory” for agents (optional)**: keep durable, *searchable* markdown knowledge alongside the repo—design decisions, gotchas, runbooks, TODOs, and context that shouldn’t live in code comments. It supports project-wide or file-scoped notes, symbol references, and fast text search so an agent can regain context across sessions.
 
 ### MCP tools you get
 
-- **📦 `codeintelx.projectInfo`**: repo root, configured source roots, DB path.
-- **🧭 `codeintelx.goToDefinition`**: go-to-definition by cursor (`filePath + line + column`) or by `symbolName`.
-- **🔁 `codeintelx.findUsages`**: find and score usages across the codebase (cursor-based or name-based).
-- **🧩 `codeintelx.dependencyGraph`**: inbound/outbound symbol dependencies (great for refactor risk checks).
+- **📦 `mesdx.projectInfo`**: repo root, configured source roots, DB path.
+- **🧭 `mesdx.goToDefinition`**: go-to-definition by cursor (`filePath + line + column`) or by `symbolName`.
+- **🔁 `mesdx.findUsages`**: find and score usages across the codebase (cursor-based or name-based).
+- **🧩 `mesdx.dependencyGraph`**: inbound/outbound symbol dependencies (great for refactor risk checks).
 
 Supported languages: **Go, Java, Rust, Python, TypeScript, JavaScript**.
 
 ## Installation
 
-### 1. Install CodeIntelX Binary
+### 1. Install MesDX Binary
 
-Download the pre-built binary for your platform from the [latest release](https://github.com/codeintelx/cli/releases/latest).
+Download the pre-built binary for your platform from the [latest release](https://github.com/mesdx/cli/releases/latest).
 
 **macOS (Apple Silicon):**
 ```bash
 install_dir="$HOME/.local/bin"
 mkdir -p "$install_dir"
-curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-darwin-arm64 -o "$install_dir/codeintelx"
-chmod +x "$install_dir/codeintelx"
+curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-arm64 -o "$install_dir/mesdx"
+chmod +x "$install_dir/mesdx"
 ```
 
 **macOS (Intel):**
 ```bash
 install_dir="$HOME/.local/bin"
 mkdir -p "$install_dir"
-curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-darwin-amd64 -o "$install_dir/codeintelx"
-chmod +x "$install_dir/codeintelx"
+curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-amd64 -o "$install_dir/mesdx"
+chmod +x "$install_dir/mesdx"
 ```
 
 **Linux:**
@@ -51,12 +51,12 @@ mkdir -p "$install_dir"
 
 # Choose ONE:
 # AMD64
-curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-linux-amd64 -o "$install_dir/codeintelx"
+curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-linux-amd64 -o "$install_dir/mesdx"
 
 # ARM64
-# curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-linux-arm64 -o "$install_dir/codeintelx"
+# curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-linux-arm64 -o "$install_dir/mesdx"
 
-chmod +x "$install_dir/codeintelx"
+chmod +x "$install_dir/mesdx"
 ```
 
 Make sure `~/.local/bin` is on your `PATH`:
@@ -75,7 +75,7 @@ source ~/.bashrc
 
 Verify installation:
 ```bash
-codeintelx --version
+mesdx --version
 ```
 
 **Optional: Verify checksum**
@@ -84,23 +84,23 @@ For security, you can verify the SHA256 checksum:
 
 ```bash
 # Download the checksum file
-curl -L https://github.com/codeintelx/cli/releases/latest/download/codeintelx-darwin-arm64.sha256 -o /tmp/codeintelx.sha256
+curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-arm64.sha256 -o /tmp/mesdx.sha256
 
 # Verify (macOS)
-cd "$install_dir" && shasum -a 256 -c /tmp/codeintelx.sha256
+cd "$install_dir" && shasum -a 256 -c /tmp/mesdx.sha256
 
 # Verify (Linux)
-cd "$install_dir" && sha256sum -c /tmp/codeintelx.sha256
+cd "$install_dir" && sha256sum -c /tmp/mesdx.sha256
 ```
 
 ### 2. Add to Claude Code
 
 Claude Code can add MCP servers via the CLI (recommended). See the official [Claude Code MCP docs](https://code.claude.com/docs/en/mcp).
 
-Add CodeIntelX as a **stdio** MCP server:
+Add MesDX as a **stdio** MCP server:
 
 ```bash
-claude mcp add codeintelx --transport stdio -- codeintelx mcp
+claude mcp add mesdx --transport stdio -- mesdx mcp
 ```
 
 **Using a specific workspace directory:**
@@ -108,7 +108,7 @@ claude mcp add codeintelx --transport stdio -- codeintelx mcp
 If you want to point the MCP server at a specific workspace directory (useful when working with multiple projects), use the `--cwd` flag:
 
 ```bash
-claude mcp add codeintelx --transport stdio -- codeintelx mcp --cwd /path/to/your/workspace
+claude mcp add mesdx --transport stdio -- mesdx mcp --cwd /path/to/your/workspace
 ```
 
 Restart Claude Code to load the MCP server.
@@ -119,13 +119,13 @@ Restart Claude Code to load the MCP server.
 
 ```bash
 cd /path/to/your/repo
-codeintelx init
+mesdx init
 ```
 
 This will:
-- **🗂️ Detect** the repository root and create `.codeintelx/config.json` + a local DB in `.codeintelx/`
+- **🗂️ Detect** the repository root and create `.mesdx/config.json` + a local DB in `.mesdx/`
 - **🔎 Index** the source directories you select (symbols + references)
-- **🧠 Create/index** a repo-relative markdown “memory” directory (default: `docs/codeintelx-memory`)
+- **🧠 Create/index** a repo-relative markdown “memory” directory (default: `docs/mesdx-memory`)
 
 ## Contributing
 

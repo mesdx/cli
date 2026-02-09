@@ -73,7 +73,7 @@ graph LR
     F0["internal/cli/mcp.go"]
     F1["internal/indexer/navigation.go"]
     F2["internal/indexer/depscore.go"]
-    F3["cmd/codeintelx/main.go"]
+    F3["cmd/mesdx/main.go"]
     F0 -->|"0.92 (8)"| F1
     F2 -->|"0.88 (5)"| F1
     F3 -->|"0.75 (2)"| F0

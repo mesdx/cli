@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/db"
+	"github.com/mesdx/cli/internal/db"
 )
 
 // setupSpanTest creates a fully indexed test DB from testdata and returns a Navigator.

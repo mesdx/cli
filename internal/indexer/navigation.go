@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/codeintelx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/symbols"
 )
 
 // Location describes a position in a source file.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/indexer"
+	"github.com/mesdx/cli/internal/indexer"
 )
 
 func TestFormatDependencyGraph_Mermaid(t *testing.T) {

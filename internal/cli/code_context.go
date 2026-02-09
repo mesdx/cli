@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/codeintelx/cli/internal/indexer"
+	"github.com/mesdx/cli/internal/indexer"
 )
 
 const (

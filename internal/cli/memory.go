@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/codeintelx/cli/internal/config"
-	"github.com/codeintelx/cli/internal/db"
-	"github.com/codeintelx/cli/internal/indexer"
-	"github.com/codeintelx/cli/internal/mcpstate"
-	"github.com/codeintelx/cli/internal/memory"
-	"github.com/codeintelx/cli/internal/repo"
+	"github.com/mesdx/cli/internal/config"
+	"github.com/mesdx/cli/internal/db"
+	"github.com/mesdx/cli/internal/indexer"
+	"github.com/mesdx/cli/internal/mcpstate"
+	"github.com/mesdx/cli/internal/memory"
+	"github.com/mesdx/cli/internal/repo"
 	"github.com/spf13/cobra"
 )
 
@@ -28,8 +28,8 @@ func newMemoryCmd() *cobra.Command {
 }
 
 // checkMCPNotRunning checks if MCP server is running and returns an error if it is
-func checkMCPNotRunning(codeintelxDir string) error {
-	running, state, err := mcpstate.IsRunning(codeintelxDir)
+func checkMCPNotRunning(mesdxDir string) error {
+	running, state, err := mcpstate.IsRunning(mesdxDir)
 	if err != nil {
 		return fmt.Errorf("failed to check MCP state: %w", err)
 	}
@@ -57,10 +57,10 @@ Memory files are indexed in chunks split by any markdown header (# through #####
 Returns ranked results. Deleted memories and memories referencing deleted files are excluded.
 
 Examples:
-  codeintelx memory search "authentication JWT tokens"
-  codeintelx memory search "database schema" --scope project
-  codeintelx memory search "main function" --scope file --file src/main.go
-  codeintelx memory search "API endpoints" --limit 5
+  mesdx memory search "authentication JWT tokens"
+  mesdx memory search "database schema" --scope project
+  mesdx memory search "main function" --scope file --file src/main.go
+  mesdx memory search "API endpoints" --limit 5
 `,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -72,20 +72,20 @@ Examples:
 				return fmt.Errorf("failed to find repo root: %w", err)
 			}
 
-			codeintelxDir := repo.CodeintelxDir(repoRoot)
+			mesdxDir := repo.MesdxDir(repoRoot)
 
 			// Check if MCP server is running
-			if err := checkMCPNotRunning(codeintelxDir); err != nil {
+			if err := checkMCPNotRunning(mesdxDir); err != nil {
 				return err
 			}
 
-			cfg, err := config.Load(codeintelxDir)
+			cfg, err := config.Load(mesdxDir)
 			if err != nil {
-				return fmt.Errorf("failed to load config: %w (run 'codeintelx init' first)", err)
+				return fmt.Errorf("failed to load config: %w (run 'mesdx init' first)", err)
 			}
 
 			// Open DB
-			dbPath := db.DatabasePath(codeintelxDir)
+			dbPath := db.DatabasePath(mesdxDir)
 			d, err := db.Open(dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open database: %w", err)
@@ -108,7 +108,7 @@ Examples:
 			if err != nil {
 				// Check if it's a lock error
 				if memory.IsIndexLockedError(err) {
-					return fmt.Errorf("memory index is locked by MCP server. Please wait for MCP operations to complete, or run 'codeintelx memory reindex' to rebuild the index")
+					return fmt.Errorf("memory index is locked by MCP server. Please wait for MCP operations to complete, or run 'mesdx memory reindex' to rebuild the index")
 				}
 				return fmt.Errorf("failed to open memory index: %w", err)
 			}
@@ -203,7 +203,7 @@ when:
   - Memory files have been manually edited or moved
 
 Examples:
-  codeintelx memory reindex
+  mesdx memory reindex
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// Find repo root and load config
@@ -212,20 +212,20 @@ Examples:
 				return fmt.Errorf("failed to find repo root: %w", err)
 			}
 
-			codeintelxDir := repo.CodeintelxDir(repoRoot)
+			mesdxDir := repo.MesdxDir(repoRoot)
 
 			// Check if MCP server is running
-			if err := checkMCPNotRunning(codeintelxDir); err != nil {
+			if err := checkMCPNotRunning(mesdxDir); err != nil {
 				return err
 			}
 
-			cfg, err := config.Load(codeintelxDir)
+			cfg, err := config.Load(mesdxDir)
 			if err != nil {
-				return fmt.Errorf("failed to load config: %w (run 'codeintelx init' first)", err)
+				return fmt.Errorf("failed to load config: %w (run 'mesdx init' first)", err)
 			}
 
 			// Open DB
-			dbPath := db.DatabasePath(codeintelxDir)
+			dbPath := db.DatabasePath(mesdxDir)
 			d, err := db.Open(dbPath)
 			if err != nil {
 				return fmt.Errorf("failed to open database: %w", err)

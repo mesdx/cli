@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/codeintelx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/symbols"
 )
 
 // PythonParser extracts symbols from Python source files using regex patterns.

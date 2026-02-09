@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/db"
+	"github.com/mesdx/cli/internal/db"
 )
 
 // ---------------------------------------------------------------------------

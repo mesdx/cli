@@ -1,6 +1,6 @@
-# Contributing to Codeintelx CLI
+# Contributing to MesDX CLI
 
-Thank you for your interest in contributing to Codeintelx CLI! This document provides guidelines and instructions for developers.
+Thank you for your interest in contributing to MesDX CLI! This document provides guidelines and instructions for developers.
 
 ## Development Setup
 
@@ -15,7 +15,7 @@ Build the CLI from source:
 
 ```bash
 cd cli
-go build ./cmd/codeintelx
+go build ./cmd/mesdx
 ```
 
 The binary will be created in the current directory.
@@ -25,7 +25,7 @@ The binary will be created in the current directory.
 Install the CLI to your Go bin directory:
 
 ```bash
-go install ./cmd/codeintelx
+go install ./cmd/mesdx
 ```
 
 Make sure `$GOPATH/bin` or `$HOME/go/bin` is in your PATH.
@@ -82,11 +82,11 @@ The `internal/repo` package handles repository root detection:
 
 ### Configuration
 
-Configuration is stored as JSON in `.codeintelx/config.json` at the repository root.
+Configuration is stored as JSON in `.mesdx/config.json` at the repository root.
 
 ### Database
 
-SQLite database is stored at `.codeintelx/index.db` using the pure-Go driver (no CGO).
+SQLite database is stored at `.mesdx/index.db` using the pure-Go driver (no CGO).
 
 ### MCP Server
 

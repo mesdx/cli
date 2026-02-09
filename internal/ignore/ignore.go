@@ -15,8 +15,8 @@ import (
 const (
 	gitignoreFile    = ".gitignore"
 	dockerignoreFile = ".dockerignore"
-	ignorePattern    = ".codeintelx/"
-	commentMarker    = "# codeintelx"
+	ignorePattern    = ".mesdx/"
+	commentMarker    = "# mesdx"
 )
 
 var (
@@ -24,7 +24,7 @@ var (
 )
 
 // HandleIgnoreFiles checks for .gitignore and .dockerignore files and prompts
-// the user to add .codeintelx/ if it's not already ignored.
+// the user to add .mesdx/ if it's not already ignored.
 func HandleIgnoreFiles(repoRoot string, cmd *cobra.Command) error {
 	// Handle .gitignore
 	gitignorePath := filepath.Join(repoRoot, gitignoreFile)
@@ -62,7 +62,7 @@ func handleIgnoreFile(filePath, toolName, impact string, cmd *cobra.Command) err
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewConfirm().
-				Title(fmt.Sprintf("Add .codeintelx/ to %s?", toolName)).
+				Title(fmt.Sprintf("Add .mesdx/ to %s?", toolName)).
 				Description(fmt.Sprintf("This %s", impact)).
 				Value(&shouldAdd),
 		),
@@ -82,11 +82,11 @@ func handleIgnoreFile(filePath, toolName, impact string, cmd *cobra.Command) err
 		return fmt.Errorf("failed to add ignore entry: %w", err)
 	}
 
-	cmd.Printf("✓ Added .codeintelx/ to %s\n", toolName)
+	cmd.Printf("✓ Added .mesdx/ to %s\n", toolName)
 	return nil
 }
 
-// isAlreadyIgnored checks if .codeintelx/ is already in the ignore file.
+// isAlreadyIgnored checks if .mesdx/ is already in the ignore file.
 func isAlreadyIgnored(filePath string) (bool, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -106,38 +106,38 @@ func isAlreadyIgnored(filePath string) (bool, error) {
 		// Normalize the line by removing trailing slash for comparison
 		normalizedLine := strings.TrimSuffix(line, "/")
 
-		// Check for exact match of .codeintelx (with or without trailing slash)
-		if normalizedLine == ".codeintelx" {
+		// Check for exact match of .mesdx (with or without trailing slash)
+		if normalizedLine == ".mesdx" {
 			return true, nil
 		}
 
-		// Check for patterns that specifically match .codeintelx/ directory
-		// We need to be very specific to avoid matching things like "cmd/codeintelx"
+		// Check for patterns that specifically match .mesdx/ directory
+		// We need to be very specific to avoid matching things like "cmd/mesdx"
 		// Valid patterns:
-		// - .codeintelx/ (exact)
-		// - .codeintelx/** (glob pattern)
-		// - **/.codeintelx/ (glob pattern)
-		// - .codeintelx (without slash)
+		// - .mesdx/ (exact)
+		// - .mesdx/** (glob pattern)
+		// - **/.mesdx/ (glob pattern)
+		// - .mesdx (without slash)
 
-		// Only check for patterns that start with ".codeintelx" (not just contain it)
-		// This ensures we don't match paths like "cmd/codeintelx" or "some/.codeintelx/other"
-		if strings.HasPrefix(normalizedLine, ".codeintelx") {
-			// Check if it's exactly ".codeintelx" or starts with ".codeintelx/" or ".codeintelx*"
-			// This covers: .codeintelx, .codeintelx/, .codeintelx/**, etc.
-			if normalizedLine == ".codeintelx" || strings.HasPrefix(line, ".codeintelx/") || strings.HasPrefix(line, ".codeintelx*") {
+		// Only check for patterns that start with ".mesdx" (not just contain it)
+		// This ensures we don't match paths like "cmd/mesdx" or "some/.mesdx/other"
+		if strings.HasPrefix(normalizedLine, ".mesdx") {
+			// Check if it's exactly ".mesdx" or starts with ".mesdx/" or ".mesdx*"
+			// This covers: .mesdx, .mesdx/, .mesdx/**, etc.
+			if normalizedLine == ".mesdx" || strings.HasPrefix(line, ".mesdx/") || strings.HasPrefix(line, ".mesdx*") {
 				return true, nil
 			}
 		}
 
-		// Check for glob patterns like "**/.codeintelx/" or "**/.codeintelx"
-		// But NOT patterns like "cmd/.codeintelx", "cmd/codeintelx", or "some/.codeintelx/other"
-		if strings.Contains(line, "/.codeintelx") {
+		// Check for glob patterns like "**/.mesdx/" or "**/.mesdx"
+		// But NOT patterns like "cmd/.mesdx", "cmd/mesdx", or "some/.mesdx/other"
+		if strings.Contains(line, "/.mesdx") {
 			// Only match if it's a glob pattern starting with **
-			// This matches: **/.codeintelx/, **/.codeintelx
-			// But NOT: cmd/.codeintelx, cmd/codeintelx, etc.
+			// This matches: **/.mesdx/, **/.mesdx
+			// But NOT: cmd/.mesdx, cmd/mesdx, etc.
 			if strings.HasPrefix(line, "**") {
-				// Verify it ends with .codeintelx (the directory pattern)
-				if strings.HasSuffix(normalizedLine, ".codeintelx") {
+				// Verify it ends with .mesdx (the directory pattern)
+				if strings.HasSuffix(normalizedLine, ".mesdx") {
 					return true, nil
 				}
 			}
@@ -147,7 +147,7 @@ func isAlreadyIgnored(filePath string) (bool, error) {
 	return false, scanner.Err()
 }
 
-// addIgnoreEntry appends .codeintelx/ to the ignore file in an idempotent way.
+// addIgnoreEntry appends .mesdx/ to the ignore file in an idempotent way.
 func addIgnoreEntry(filePath string) error {
 	// Double-check it's not already there (race condition protection)
 	alreadyIgnored, err := isAlreadyIgnored(filePath)

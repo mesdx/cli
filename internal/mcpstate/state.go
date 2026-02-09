@@ -18,12 +18,12 @@ type State struct {
 }
 
 // StatePath returns the path to the MCP state file
-func StatePath(codeintelxDir string) string {
-	return filepath.Join(codeintelxDir, stateFileName)
+func StatePath(mesdxDir string) string {
+	return filepath.Join(mesdxDir, stateFileName)
 }
 
 // CreateStateFile writes the MCP state file indicating the server is running
-func CreateStateFile(codeintelxDir string) error {
+func CreateStateFile(mesdxDir string) error {
 	state := State{
 		PID:       os.Getpid(),
 		StartedAt: time.Now(),
@@ -34,7 +34,7 @@ func CreateStateFile(codeintelxDir string) error {
 		return fmt.Errorf("marshal state: %w", err)
 	}
 
-	statePath := StatePath(codeintelxDir)
+	statePath := StatePath(mesdxDir)
 	if err := os.WriteFile(statePath, data, 0644); err != nil {
 		return fmt.Errorf("write state file: %w", err)
 	}
@@ -43,8 +43,8 @@ func CreateStateFile(codeintelxDir string) error {
 }
 
 // RemoveStateFile removes the MCP state file
-func RemoveStateFile(codeintelxDir string) error {
-	statePath := StatePath(codeintelxDir)
+func RemoveStateFile(mesdxDir string) error {
+	statePath := StatePath(mesdxDir)
 	if err := os.Remove(statePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove state file: %w", err)
 	}
@@ -53,8 +53,8 @@ func RemoveStateFile(codeintelxDir string) error {
 
 // IsRunning checks if the MCP server is currently running by checking the state file
 // and verifying the process is still alive
-func IsRunning(codeintelxDir string) (bool, *State, error) {
-	statePath := StatePath(codeintelxDir)
+func IsRunning(mesdxDir string) (bool, *State, error) {
+	statePath := StatePath(mesdxDir)
 
 	data, err := os.ReadFile(statePath)
 	if err != nil {

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	githubRepo = "codeintelx/cli"
+	githubRepo = "mesdx/cli"
 	githubAPI  = "https://api.github.com/repos/" + githubRepo + "/releases/latest"
 	timeout    = 10 * time.Second
 )
@@ -34,7 +34,7 @@ type Asset struct {
 // Returns true if an update was performed, false otherwise
 func CheckAndUpdate(currentVersion string) error {
 	// Skip if disabled
-	if os.Getenv("CODEINTELX_NO_SELF_UPDATE") == "1" {
+	if os.Getenv("MESDX_NO_SELF_UPDATE") == "1" {
 		return nil
 	}
 
@@ -108,7 +108,7 @@ func CheckAndUpdate(currentVersion string) error {
 		return nil
 	}
 
-	fmt.Printf("✓ Updated codeintelx from %s to %s\n", currentVersion, release.TagName)
+	fmt.Printf("✓ Updated mesdx from %s to %s\n", currentVersion, release.TagName)
 	fmt.Println("  Please re-run your command to use the new version.")
 
 	return nil
@@ -135,7 +135,7 @@ func fetchLatestRelease() (*Release, error) {
 }
 
 func assetNameForPlatform() string {
-	return fmt.Sprintf("codeintelx-%s-%s", runtime.GOOS, runtime.GOARCH)
+	return fmt.Sprintf("mesdx-%s-%s", runtime.GOOS, runtime.GOARCH)
 }
 
 func findAsset(assets []Asset, name string) *Asset {
@@ -151,7 +151,7 @@ func canWriteToPath(path string) bool {
 	// Try to open for writing to check permissions
 	// We'll try opening the directory with a test file
 	dir := filepath.Dir(path)
-	testFile := filepath.Join(dir, ".codeintelx-write-test")
+	testFile := filepath.Join(dir, ".mesdx-write-test")
 
 	f, err := os.Create(testFile)
 	if err != nil {
@@ -166,7 +166,7 @@ func canWriteToPath(path string) bool {
 func downloadAndReplace(url, targetPath string) error {
 	// Download to temp file in same directory for atomic rename
 	dir := filepath.Dir(targetPath)
-	tmpFile, err := os.CreateTemp(dir, ".codeintelx-update-*")
+	tmpFile, err := os.CreateTemp(dir, ".mesdx-update-*")
 	if err != nil {
 		return err
 	}
@@ -213,19 +213,19 @@ func printManualUpdateInstructions(currentVersion, newVersion, assetName, downlo
 	fmt.Printf("│ Update Available: %s → %s                          \n", currentVersion, newVersion)
 	fmt.Printf("╰─────────────────────────────────────────────────────────────────╯\n")
 	fmt.Printf("\n")
-	fmt.Printf("The codeintelx binary is installed in a location that requires\n")
+	fmt.Printf("The mesdx binary is installed in a location that requires\n")
 	fmt.Printf("elevated permissions to update. To update manually, run:\n")
 	fmt.Printf("\n")
-	fmt.Printf("  curl -L %s -o /tmp/codeintelx\n", downloadURL)
-	fmt.Printf("  chmod +x /tmp/codeintelx\n")
+	fmt.Printf("  curl -L %s -o /tmp/mesdx\n", downloadURL)
+	fmt.Printf("  chmod +x /tmp/mesdx\n")
 
 	// Try to detect install location
 	exePath, err := os.Executable()
 	if err == nil {
 		exePath, _ = filepath.EvalSymlinks(exePath)
-		fmt.Printf("  sudo mv /tmp/codeintelx %s\n", exePath)
+		fmt.Printf("  sudo mv /tmp/mesdx %s\n", exePath)
 	} else {
-		fmt.Printf("  sudo mv /tmp/codeintelx /usr/local/bin/codeintelx\n")
+		fmt.Printf("  sudo mv /tmp/mesdx /usr/local/bin/mesdx\n")
 	}
 
 	fmt.Printf("\n")

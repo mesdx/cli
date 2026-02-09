@@ -1,4 +1,4 @@
-module github.com/codeintelx/cli
+module github.com/mesdx/cli
 
 go 1.25.1
 

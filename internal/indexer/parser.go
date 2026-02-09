@@ -1,6 +1,6 @@
 package indexer
 
-import "github.com/codeintelx/cli/internal/symbols"
+import "github.com/mesdx/cli/internal/symbols"
 
 // Parser extracts symbols and references from source code.
 type Parser interface {

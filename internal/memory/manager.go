@@ -13,7 +13,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/codeintelx/cli/internal/search"
+	"github.com/mesdx/cli/internal/search"
 )
 
 // IsIndexLockedError checks if the error is related to an index being locked
@@ -44,7 +44,7 @@ type Manager struct {
 // The search index is opened in read-write mode and kept open for the
 // lifetime of the Manager. Call Close() when done.
 func NewManager(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) (*Manager, error) {
-	searchBase := filepath.Join(repoRoot, ".codeintelx", "search")
+	searchBase := filepath.Join(repoRoot, ".mesdx", "search")
 	if err := search.EnsureIndexDir(searchBase); err != nil {
 		return nil, fmt.Errorf("create search dir: %w", err)
 	}
@@ -72,7 +72,7 @@ func NewManager(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) (*Ma
 // Only Search / Read / List operations are expected; write operations that
 // touch the index will return errors.
 func NewManagerReadOnly(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) (*Manager, error) {
-	searchBase := filepath.Join(repoRoot, ".codeintelx", "search")
+	searchBase := filepath.Join(repoRoot, ".mesdx", "search")
 	idx, err := search.NewMemoryIndexReadOnly(projectID, searchBase)
 	if err != nil {
 		return nil, fmt.Errorf("open search index (read-only): %w", err)
@@ -112,7 +112,7 @@ func (m *Manager) removeFromSearch(mdRelPath string) error {
 
 // MemoryElement is a fully-loaded memory element (frontmatter + body + paths).
 type MemoryElement struct {
-	Meta      *CodeintelxMeta `json:"meta"`
+	Meta      *MesdxMeta `json:"meta"`
 	Body      string          `json:"body"`
 	MdRelPath string          `json:"mdRelPath"`
 	AbsPath   string          `json:"absPath"`
@@ -652,7 +652,7 @@ func (m *Manager) salvageMerge(sourceMdRelPath, content string) error {
 		existingData = data
 	}
 
-	var meta *CodeintelxMeta
+	var meta *MesdxMeta
 	var existingBody string
 
 	if len(existingData) > 0 {
@@ -764,7 +764,7 @@ func (m *Manager) loadElement(row *MemoryRow) (*MemoryElement, error) {
 	if err != nil {
 		// Return what we can from DB
 		return &MemoryElement{
-			Meta: &CodeintelxMeta{
+			Meta: &MesdxMeta{
 				ID:         row.MemoryUID,
 				Scope:      row.Scope,
 				File:       row.FilePath,
@@ -786,7 +786,7 @@ func (m *Manager) loadElement(row *MemoryRow) (*MemoryElement, error) {
 	}, nil
 }
 
-func (m *Manager) indexToSearch(meta *CodeintelxMeta, mdRelPath, body string) error {
+func (m *Manager) indexToSearch(meta *MesdxMeta, mdRelPath, body string) error {
 	if meta == nil {
 		return nil
 	}

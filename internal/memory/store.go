@@ -35,7 +35,7 @@ type SearchResult struct {
 }
 
 // UpsertMemory inserts or updates a memory record and its symbols.
-func (s *MemoryStore) UpsertMemory(meta *CodeintelxMeta, mdRelPath, bodyHash string) (int64, error) {
+func (s *MemoryStore) UpsertMemory(meta *MesdxMeta, mdRelPath, bodyHash string) (int64, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err

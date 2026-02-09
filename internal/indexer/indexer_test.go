@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/db"
-	"github.com/codeintelx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/db"
+	"github.com/mesdx/cli/internal/symbols"
 )
 
 // setupTestDB creates a temporary DB and returns a Store + cleanup func.

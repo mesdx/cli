@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/codeintelx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/symbols"
 )
 
 // lineAt returns the 1-based line number for a byte offset in content.

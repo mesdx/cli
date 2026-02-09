@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/indexer"
+	"github.com/mesdx/cli/internal/indexer"
 )
 
 // testdataRoot returns the absolute path to internal/indexer/testdata.

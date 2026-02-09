@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/db"
+	"github.com/mesdx/cli/internal/db"
 )
 
 func setupNavigationTest(t *testing.T) (*Navigator, *Indexer, func()) {

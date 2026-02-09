@@ -51,7 +51,7 @@ type MemoryChunkDoc struct {
 }
 
 // NewMemoryIndex opens (or creates) a memory index rooted at baseDir.
-// baseDir is typically `<repoRoot>/.codeintelx/search`.
+// baseDir is typically `<repoRoot>/.mesdx/search`.
 func NewMemoryIndex(projectID int64, baseDir string) (*MemoryIndex, error) {
 	indexPath := filepath.Join(baseDir, "memory.bleve")
 	manifestPath := filepath.Join(baseDir, "memory-manifest.json")

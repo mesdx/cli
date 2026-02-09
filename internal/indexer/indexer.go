@@ -28,7 +28,7 @@ func New(d *sql.DB, repoRoot string) *Indexer {
 // excluded directories for walking.
 var excludedDirs = map[string]bool{
 	".git":         true,
-	".codeintelx":  true,
+	".mesdx":  true,
 	"node_modules": true,
 	".venv":        true,
 	"venv":         true,

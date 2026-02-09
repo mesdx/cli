@@ -14,19 +14,19 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
-            artifact_name: codeintelx-linux-amd64
+            artifact_name: mesdx-linux-amd64
           - os: ubuntu-latest
             goos: linux
             goarch: arm64
-            artifact_name: codeintelx-linux-arm64
+            artifact_name: mesdx-linux-arm64
           - os: macos-14
             goos: darwin
             goarch: amd64
-            artifact_name: codeintelx-darwin-amd64
+            artifact_name: mesdx-darwin-amd64
           - os: macos-14
             goos: darwin
             goarch: arm64
-            artifact_name: codeintelx-darwin-arm64
+            artifact_name: mesdx-darwin-arm64
 
     steps:
       - name: Checkout code
@@ -49,7 +49,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ steps.get_version.outputs.version }}
         run: |
-          go build -ldflags="-s -w -X github.com/codeintelx/cli/internal/cli.version=$VERSION" -o ${{ matrix.artifact_name }} ./cmd/codeintelx
+          go build -ldflags="-s -w -X github.com/mesdx/cli/internal/cli.version=$VERSION" -o ${{ matrix.artifact_name }} ./cmd/mesdx
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -76,7 +76,7 @@ jobs:
       - name: Create checksums
         working-directory: ./artifacts
         run: |
-          find . -type f -name "codeintelx-*" ! -name "*.sha256" -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
+          find . -type f -name "mesdx-*" ! -name "*.sha256" -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

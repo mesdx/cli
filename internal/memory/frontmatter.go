@@ -10,8 +10,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// CodeintelxMeta is the top-level codeintelx metadata stored in YAML frontmatter.
-type CodeintelxMeta struct {
+// MesdxMeta is the top-level mesdx metadata stored in YAML frontmatter.
+type MesdxMeta struct {
 	ID         string      `yaml:"id" json:"id"`
 	Scope      string      `yaml:"scope" json:"scope"`
 	File       string      `yaml:"file,omitempty" json:"file,omitempty"`
@@ -29,15 +29,15 @@ type SymbolRef struct {
 	LastResolvedAt string `yaml:"lastResolvedAt,omitempty" json:"lastResolvedAt,omitempty"`
 }
 
-// frontmatterWrapper wraps CodeintelxMeta for YAML marshaling.
+// frontmatterWrapper wraps MesdxMeta for YAML marshaling.
 type frontmatterWrapper struct {
-	Codeintelx CodeintelxMeta `yaml:"codeintelx"`
+	Mesdx MesdxMeta `yaml:"mesdx"`
 }
 
 // ParseMarkdown parses a markdown file with YAML frontmatter.
 // Returns the parsed metadata, the body text, and any error.
 // If the frontmatter is not parsable, returns an error (caller should handle salvage).
-func ParseMarkdown(data []byte) (*CodeintelxMeta, string, error) {
+func ParseMarkdown(data []byte) (*MesdxMeta, string, error) {
 	fmRaw, body, hasFM := splitFrontmatter(string(data))
 	if !hasFM {
 		return nil, string(data), fmt.Errorf("no frontmatter found")
@@ -48,9 +48,9 @@ func ParseMarkdown(data []byte) (*CodeintelxMeta, string, error) {
 		return nil, string(data), fmt.Errorf("invalid YAML frontmatter: %w", err)
 	}
 
-	meta := &wrapper.Codeintelx
+	meta := &wrapper.Mesdx
 	if meta.ID == "" {
-		return nil, string(data), fmt.Errorf("missing codeintelx.id in frontmatter")
+		return nil, string(data), fmt.Errorf("missing mesdx.id in frontmatter")
 	}
 
 	// Apply defaults for missing fields
@@ -73,8 +73,8 @@ func ParseMarkdown(data []byte) (*CodeintelxMeta, string, error) {
 }
 
 // WriteMarkdown writes a markdown file with YAML frontmatter.
-func WriteMarkdown(meta *CodeintelxMeta, body string) ([]byte, error) {
-	wrapper := frontmatterWrapper{Codeintelx: *meta}
+func WriteMarkdown(meta *MesdxMeta, body string) ([]byte, error) {
+	wrapper := frontmatterWrapper{Mesdx: *meta}
 	fmBytes, err := yaml.Marshal(&wrapper)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal frontmatter: %w", err)
@@ -122,9 +122,9 @@ func NewMemoryID() string {
 	return uuid.New().String()
 }
 
-// NewMeta creates a new CodeintelxMeta with defaults.
-func NewMeta(scope, filePath, title string, symbols []SymbolRef) *CodeintelxMeta {
-	meta := &CodeintelxMeta{
+// NewMeta creates a new MesdxMeta with defaults.
+func NewMeta(scope, filePath, title string, symbols []SymbolRef) *MesdxMeta {
+	meta := &MesdxMeta{
 		ID:         NewMemoryID(),
 		Scope:      scope,
 		File:       filePath,

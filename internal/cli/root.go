@@ -1,20 +1,20 @@
 package cli
 
 import (
-	"github.com/codeintelx/cli/internal/selfupdate"
+	"github.com/mesdx/cli/internal/selfupdate"
 	"github.com/spf13/cobra"
 )
 
-// Version is the version of codeintelx CLI.
+// Version is the version of mesdx CLI.
 // Update this constant manually on every release.
 const Version = "v0.1.2"
 
-// NewRootCmd creates the root command for codeintelx
+// NewRootCmd creates the root command for mesdx
 func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
-		Use:     "codeintelx",
+		Use:     "mesdx",
 		Short:   "Code intelligence CLI and MCP server",
-		Long:    "Codeintelx is a CLI tool for indexing codebases and exposing code intelligence via MCP.",
+		Long:    "MesDX is a CLI tool for indexing codebases and exposing code intelligence via MCP.",
 		Version: Version,
 		// SilenceErrors prevents Cobra from printing errors twice
 		// (once by the command, once by the root)

@@ -11,9 +11,9 @@ import (
 
 const dbFileName = "index.db"
 
-// DatabasePath returns the path to the database file in the codeintelx directory.
-func DatabasePath(codeintelxDir string) string {
-	return filepath.Join(codeintelxDir, dbFileName)
+// DatabasePath returns the path to the database file in the mesdx directory.
+func DatabasePath(mesdxDir string) string {
+	return filepath.Join(mesdxDir, dbFileName)
 }
 
 // Open opens the database file and returns a *sql.DB handle.

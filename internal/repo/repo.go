@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const codeintelxDirName = ".codeintelx"
+const mesdxDirName = ".mesdx"
 
 // FindRoot finds the repository root directory.
 // It first checks if .git exists in the current directory or any parent.
@@ -38,9 +38,9 @@ func FindRoot() (string, error) {
 	return cwd, nil
 }
 
-// CodeintelxDir returns the path to the .codeintelx directory for a given repo root.
-func CodeintelxDir(repoRoot string) string {
-	return filepath.Join(repoRoot, codeintelxDirName)
+// MesdxDir returns the path to the .mesdx directory for a given repo root.
+func MesdxDir(repoRoot string) string {
+	return filepath.Join(repoRoot, mesdxDirName)
 }
 
 // DiscoverSubdirs discovers immediate subdirectories in the repo root,
@@ -54,7 +54,7 @@ func DiscoverSubdirs(repoRoot string) ([]string, error) {
 	var subdirs []string
 	excluded := map[string]bool{
 		".git":            true,
-		codeintelxDirName: true,
+		mesdxDirName: true,
 		"node_modules":    true,
 		".venv":           true,
 		"venv":            true,
@@ -77,7 +77,7 @@ func DiscoverSubdirs(repoRoot string) ([]string, error) {
 			continue
 		}
 
-		// Skip hidden directories (except .codeintelx which is already excluded)
+		// Skip hidden directories (except .mesdx which is already excluded)
 		if strings.HasPrefix(name, ".") {
 			continue
 		}

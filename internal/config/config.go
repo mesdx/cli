@@ -10,23 +10,23 @@ import (
 const configFileName = "config.json"
 
 // DefaultMemoryDir is the default directory for storing memory markdown files.
-const DefaultMemoryDir = "docs/codeintelx-memory"
+const DefaultMemoryDir = "docs/mesdx-memory"
 
-// Config represents the codeintelx configuration.
+// Config represents the mesdx configuration.
 type Config struct {
 	RepoRoot    string   `json:"repoRoot"`
 	SourceRoots []string `json:"sourceRoots"`
 	MemoryDir   string   `json:"memoryDir,omitempty"`
 }
 
-// ConfigPath returns the path to the config file in the codeintelx directory.
-func ConfigPath(codeintelxDir string) string {
-	return filepath.Join(codeintelxDir, configFileName)
+// ConfigPath returns the path to the config file in the mesdx directory.
+func ConfigPath(mesdxDir string) string {
+	return filepath.Join(mesdxDir, configFileName)
 }
 
 // Save writes the configuration to disk.
-func Save(cfg *Config, codeintelxDir string) error {
-	configPath := ConfigPath(codeintelxDir)
+func Save(cfg *Config, mesdxDir string) error {
+	configPath := ConfigPath(mesdxDir)
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -41,8 +41,8 @@ func Save(cfg *Config, codeintelxDir string) error {
 }
 
 // Load reads the configuration from disk.
-func Load(codeintelxDir string) (*Config, error) {
-	configPath := ConfigPath(codeintelxDir)
+func Load(mesdxDir string) (*Config, error) {
+	configPath := ConfigPath(mesdxDir)
 
 	data, err := os.ReadFile(configPath)
 	if err != nil {

@@ -8,7 +8,7 @@ import (
 )
 
 func TestAssetNameForPlatform(t *testing.T) {
-	expected := "codeintelx-" + runtime.GOOS + "-" + runtime.GOARCH
+	expected := "mesdx-" + runtime.GOOS + "-" + runtime.GOARCH
 	actual := assetNameForPlatform()
 
 	if actual != expected {
@@ -18,9 +18,9 @@ func TestAssetNameForPlatform(t *testing.T) {
 
 func TestFindAsset(t *testing.T) {
 	assets := []Asset{
-		{Name: "codeintelx-darwin-arm64", BrowserDownloadURL: "https://example.com/darwin-arm64"},
-		{Name: "codeintelx-darwin-amd64", BrowserDownloadURL: "https://example.com/darwin-amd64"},
-		{Name: "codeintelx-linux-amd64", BrowserDownloadURL: "https://example.com/linux-amd64"},
+		{Name: "mesdx-darwin-arm64", BrowserDownloadURL: "https://example.com/darwin-arm64"},
+		{Name: "mesdx-darwin-amd64", BrowserDownloadURL: "https://example.com/darwin-amd64"},
+		{Name: "mesdx-linux-amd64", BrowserDownloadURL: "https://example.com/linux-amd64"},
 	}
 
 	tests := []struct {
@@ -31,19 +31,19 @@ func TestFindAsset(t *testing.T) {
 	}{
 		{
 			name:      "find darwin-arm64",
-			assetName: "codeintelx-darwin-arm64",
+			assetName: "mesdx-darwin-arm64",
 			want:      "https://example.com/darwin-arm64",
 			wantNil:   false,
 		},
 		{
 			name:      "find linux-amd64",
-			assetName: "codeintelx-linux-amd64",
+			assetName: "mesdx-linux-amd64",
 			want:      "https://example.com/linux-amd64",
 			wantNil:   false,
 		},
 		{
 			name:      "not found",
-			assetName: "codeintelx-windows-amd64",
+			assetName: "mesdx-windows-amd64",
 			wantNil:   true,
 		},
 	}
@@ -83,7 +83,7 @@ func TestCanWriteToPath(t *testing.T) {
 
 	// Test with a path in a non-writable location (if not root)
 	if os.Getuid() != 0 {
-		nonWritablePath := "/usr/local/bin/codeintelx"
+		nonWritablePath := "/usr/local/bin/mesdx"
 		// Only test if the directory actually exists
 		if _, err := os.Stat("/usr/local/bin"); err == nil {
 			if canWriteToPath(nonWritablePath) {
@@ -96,8 +96,8 @@ func TestCanWriteToPath(t *testing.T) {
 
 func TestCheckAndUpdate_SkipWhenDisabled(t *testing.T) {
 	// Set env var to disable
-	_ = os.Setenv("CODEINTELX_NO_SELF_UPDATE", "1")
-	defer func() { _ = os.Unsetenv("CODEINTELX_NO_SELF_UPDATE") }()
+	_ = os.Setenv("MESDX_NO_SELF_UPDATE", "1")
+	defer func() { _ = os.Unsetenv("MESDX_NO_SELF_UPDATE") }()
 
 	// Should not error and should skip
 	err := CheckAndUpdate("v0.1.0")

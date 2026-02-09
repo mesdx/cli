@@ -106,9 +106,9 @@ jobs:
           go-version: '1.25.1'
 
       - name: Build binary
-        run: go build -v -o codeintelx ./cmd/codeintelx
+        run: go build -v -o mesdx ./cmd/mesdx
 
       - name: Verify binary
         run: |
-          chmod +x codeintelx
-          ./codeintelx --version || echo "Binary built successfully"
+          chmod +x mesdx
+          ./mesdx --version || echo "Binary built successfully"

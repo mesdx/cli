@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	stateFileName = "codeintelx-update.json"
+	stateFileName = "mesdx-update.json"
 	defaultTTL    = 24 * time.Hour
 )
 
@@ -99,5 +99,5 @@ func defaultStatePath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(cacheDir, "codeintelx", stateFileName), nil
+	return filepath.Join(cacheDir, "mesdx", stateFileName), nil
 }

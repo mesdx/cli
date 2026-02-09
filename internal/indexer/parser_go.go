@@ -6,7 +6,7 @@ import (
 	"go/token"
 	"strings"
 
-	"github.com/codeintelx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/symbols"
 )
 
 // GoParser uses go/parser + go/ast for Go symbol extraction.

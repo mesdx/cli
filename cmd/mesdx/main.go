@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/codeintelx/cli/internal/cli"
+	"github.com/mesdx/cli/internal/cli"
 	"github.com/spf13/cobra"
 )
 

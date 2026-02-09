@@ -8,12 +8,12 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/codeintelx/cli/internal/config"
-	"github.com/codeintelx/cli/internal/db"
-	"github.com/codeintelx/cli/internal/ignore"
-	"github.com/codeintelx/cli/internal/indexer"
-	"github.com/codeintelx/cli/internal/memory"
-	"github.com/codeintelx/cli/internal/repo"
+	"github.com/mesdx/cli/internal/config"
+	"github.com/mesdx/cli/internal/db"
+	"github.com/mesdx/cli/internal/ignore"
+	"github.com/mesdx/cli/internal/indexer"
+	"github.com/mesdx/cli/internal/memory"
+	"github.com/mesdx/cli/internal/repo"
 	"github.com/spf13/cobra"
 )
 
@@ -25,8 +25,8 @@ var (
 func newInitCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "Initialize codeintelx in the current repository",
-		Long:  "Initialize codeintelx by selecting source directories and setting up the index database.",
+		Short: "Initialize mesdx in the current repository",
+		Long:  "Initialize mesdx by selecting source directories and setting up the index database.",
 		RunE:  runInit,
 	}
 
@@ -40,7 +40,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to find repo root: %w", err)
 	}
 
-	cmd.Printf("%s Initializing codeintelx in: %s\n", infoStyle.Render("→"), repoRoot)
+	cmd.Printf("%s Initializing mesdx in: %s\n", infoStyle.Render("→"), repoRoot)
 
 	// Discover all directories recursively for selection
 	allDirs, err := repo.DiscoverAllDirs(repoRoot)
@@ -98,7 +98,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Memory directory").
-				Description("Where should codeintelx store markdown memory files? (repo-relative, committed to VCS)").
+				Description("Where should mesdx store markdown memory files? (repo-relative, committed to VCS)").
 				Placeholder(config.DefaultMemoryDir).
 				Value(&memoryDir),
 		),
@@ -109,9 +109,9 @@ func runInit(cmd *cobra.Command, args []string) error {
 	if memoryDir == "" {
 		memoryDir = config.DefaultMemoryDir
 	}
-	// Validate: not inside .codeintelx
-	if strings.HasPrefix(memoryDir, ".codeintelx") {
-		return fmt.Errorf("memory directory cannot be inside .codeintelx/")
+	// Validate: not inside .mesdx
+	if strings.HasPrefix(memoryDir, ".mesdx") {
+		return fmt.Errorf("memory directory cannot be inside .mesdx/")
 	}
 
 	// Create memory directory
@@ -121,13 +121,13 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	cmd.Printf("%s Memory directory: %s\n", successStyle.Render("✓"), memoryDir)
 
-	// Remove existing .codeintelx directory and recreate (bulk replace)
-	codeintelxDir := repo.CodeintelxDir(repoRoot)
-	if err := os.RemoveAll(codeintelxDir); err != nil {
-		return fmt.Errorf("failed to remove existing .codeintelx directory: %w", err)
+	// Remove existing .mesdx directory and recreate (bulk replace)
+	mesdxDir := repo.MesdxDir(repoRoot)
+	if err := os.RemoveAll(mesdxDir); err != nil {
+		return fmt.Errorf("failed to remove existing .mesdx directory: %w", err)
 	}
-	if err := os.MkdirAll(codeintelxDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .codeintelx directory: %w", err)
+	if err := os.MkdirAll(mesdxDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .mesdx directory: %w", err)
 	}
 
 	// Save config
@@ -136,14 +136,14 @@ func runInit(cmd *cobra.Command, args []string) error {
 		SourceRoots: selectedDirs,
 		MemoryDir:   memoryDir,
 	}
-	if err := config.Save(cfg, codeintelxDir); err != nil {
+	if err := config.Save(cfg, mesdxDir); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
 
-	cmd.Printf("%s Configuration saved to: %s\n", successStyle.Render("✓"), config.ConfigPath(codeintelxDir))
+	cmd.Printf("%s Configuration saved to: %s\n", successStyle.Render("✓"), config.ConfigPath(mesdxDir))
 
 	// Initialize database
-	dbPath := db.DatabasePath(codeintelxDir)
+	dbPath := db.DatabasePath(mesdxDir)
 	if err := db.Initialize(dbPath); err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
@@ -195,7 +195,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	cmd.Printf("\n%s Initialization complete!\n", successStyle.Render("✓"))
 	cmd.Println("Next steps:")
-	cmd.Println("  - Run 'codeintelx mcp' to start the MCP server")
+	cmd.Println("  - Run 'mesdx mcp' to start the MCP server")
 	cmd.Println("  - Configure Claude Code to use this MCP server")
 
 	return nil

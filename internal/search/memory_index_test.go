@@ -144,7 +144,7 @@ This project is licensed under the FSL.
 
 ### Key Points
 
-- Copyright: 2026 CodeIntelX contributors
+- Copyright: 2026 MesDX contributors
 
 ## Permitted Uses
 

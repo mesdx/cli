@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codeintelx/cli/internal/db"
+	"github.com/mesdx/cli/internal/db"
 )
 
 // setupTestDB creates a temporary SQLite database with all migrations applied.
@@ -35,7 +35,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 
 func TestParseMarkdownValid(t *testing.T) {
 	md := `---
-codeintelx:
+mesdx:
   id: "abc123"
   scope: "file"
   file: "internal/foo.go"
@@ -87,7 +87,7 @@ func TestParseMarkdownNoFrontmatter(t *testing.T) {
 
 func TestParseMarkdownMissingID(t *testing.T) {
 	md := `---
-codeintelx:
+mesdx:
   scope: "project"
 ---
 
@@ -100,7 +100,7 @@ Body text.
 }
 
 func TestWriteMarkdownRoundTrip(t *testing.T) {
-	meta := &CodeintelxMeta{
+	meta := &MesdxMeta{
 		ID:         "test-id-1",
 		Scope:      "project",
 		Title:      "Test Title",
@@ -341,7 +341,7 @@ func TestManagerBulkIndexAndReconcile(t *testing.T) {
 	}
 
 	// Create a file-scoped memory referencing a file that doesn't exist
-	meta := &CodeintelxMeta{
+	meta := &MesdxMeta{
 		ID:         "reconcile-test",
 		Scope:      "file",
 		File:       "nonexistent/file.go",

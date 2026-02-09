@@ -14,7 +14,7 @@ func TestStateLoadAndSave(t *testing.T) {
 	// Override the state path for testing
 	originalStatePathFunc := statePathFunc
 	statePathFunc = func() (string, error) {
-		return filepath.Join(tmpDir, "codeintelx", stateFileName), nil
+		return filepath.Join(tmpDir, "mesdx", stateFileName), nil
 	}
 	defer func() { statePathFunc = originalStatePathFunc }()
 
@@ -109,7 +109,7 @@ func TestStateLoadCorruptFile(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create a corrupt state file
-	stateFile := filepath.Join(tmpDir, "codeintelx", stateFileName)
+	stateFile := filepath.Join(tmpDir, "mesdx", stateFileName)
 	if err := os.MkdirAll(filepath.Dir(stateFile), 0755); err != nil {
 		t.Fatalf("Failed to create directory: %v", err)
 	}

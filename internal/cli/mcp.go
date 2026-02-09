@@ -11,13 +11,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codeintelx/cli/internal/config"
-	"github.com/codeintelx/cli/internal/db"
-	"github.com/codeintelx/cli/internal/indexer"
-	"github.com/codeintelx/cli/internal/mcpstate"
-	"github.com/codeintelx/cli/internal/memory"
-	"github.com/codeintelx/cli/internal/repo"
 	"github.com/fsnotify/fsnotify"
+	"github.com/mesdx/cli/internal/config"
+	"github.com/mesdx/cli/internal/db"
+	"github.com/mesdx/cli/internal/indexer"
+	"github.com/mesdx/cli/internal/mcpstate"
+	"github.com/mesdx/cli/internal/memory"
+	"github.com/mesdx/cli/internal/repo"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 )
@@ -113,32 +113,32 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to find repo root: %w", err)
 	}
 
-	codeintelxDir := repo.CodeintelxDir(repoRoot)
+	mesdxDir := repo.MesdxDir(repoRoot)
 
 	// Create MCP state file to indicate server is running
-	if err := mcpstate.CreateStateFile(codeintelxDir); err != nil {
+	if err := mcpstate.CreateStateFile(mesdxDir); err != nil {
 		return fmt.Errorf("failed to create MCP state file: %w", err)
 	}
 	// Ensure state file is removed on exit
 	defer func() {
-		if err := mcpstate.RemoveStateFile(codeintelxDir); err != nil {
+		if err := mcpstate.RemoveStateFile(mesdxDir); err != nil {
 			log.Printf("warning: failed to remove MCP state file: %v", err)
 		}
 	}()
 
-	// Redirect all logging to .codeintelx/mcp.log so nothing leaks into
+	// Redirect all logging to .mesdx/mcp.log so nothing leaks into
 	// the stdio JSON-RPC transport.
-	if err := initMCPLog(codeintelxDir); err != nil {
+	if err := initMCPLog(mesdxDir); err != nil {
 		return fmt.Errorf("failed to initialize mcp log: %w", err)
 	}
 
-	cfg, err := config.Load(codeintelxDir)
+	cfg, err := config.Load(mesdxDir)
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
 	// Open and migrate DB
-	dbPath := db.DatabasePath(codeintelxDir)
+	dbPath := db.DatabasePath(mesdxDir)
 	d, err := db.Open(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
@@ -214,13 +214,13 @@ func runMcp(cmd *cobra.Command, args []string) error {
 
 	// Create MCP server
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "codeintelx",
+		Name:    "mesdx",
 		Version: Version,
 	}, nil)
 
 	// Register project info tool
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.projectInfo",
+		Name:        "mesdx.projectInfo",
 		Description: "Get project information including repo root, source roots, and database path",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
 		info := map[string]interface{}{
@@ -241,7 +241,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 
 	// Register Go To Definition tool
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.goToDefinition",
+		Name:        "mesdx.goToDefinition",
 		Description: "Find the definition of a symbol. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns definition locations with file path, line, column, kind, signature, and optionally the code. The language parameter is required.",
 		InputSchema: mustSchema(GoToDefArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args GoToDefArgs) (*mcp.CallToolResult, any, error) {
@@ -319,7 +319,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 
 	// Register Find Usages tool
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.findUsages",
+		Name:        "mesdx.findUsages",
 		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, context, and a dependencyScore (0-1) indicating confidence that the usage truly depends on the intended definition. Results are sorted by score (descending) while keeping adjacent usages grouped. The language parameter is required. For fetchCodeLinesAround: prefer 0 (or more) for better context; use -1 only when context is limited.",
 		InputSchema: mustSchema(FindUsagesArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args FindUsagesArgs) (*mcp.CallToolResult, any, error) {
@@ -473,7 +473,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 
 	// Register Dependency Graph tool
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.dependencyGraph",
+		Name:        "mesdx.dependencyGraph",
 		Description: "Extract a dependency graph for a symbol, showing inbound usages (who depends on it) and outbound dependencies (what it depends on). Returns a symbol-level graph, a collapsed file-level graph, scored usages, and candidate definitions. Use this for risk analysis when renaming or removing a symbol. The language parameter is required.",
 		InputSchema: mustSchema(DependencyGraphArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args DependencyGraphArgs) (*mcp.CallToolResult, any, error) {
@@ -707,11 +707,11 @@ func addWatchRecursive(watcher *fsnotify.Watcher, root string) error {
 
 const mcpLogFileName = "mcp.log"
 
-// initMCPLog opens (or creates) .codeintelx/mcp.log and redirects the
+// initMCPLog opens (or creates) .mesdx/mcp.log and redirects the
 // standard log package output there. The file is truncated on each startup
 // so it never grows unbounded between runs.
-func initMCPLog(codeintelxDir string) error {
-	logPath := filepath.Join(codeintelxDir, mcpLogFileName)
+func initMCPLog(mesdxDir string) error {
+	logPath := filepath.Join(mesdxDir, mcpLogFileName)
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return err

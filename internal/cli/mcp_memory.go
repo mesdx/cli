@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/codeintelx/cli/internal/memory"
+	"github.com/mesdx/cli/internal/memory"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -64,7 +64,7 @@ type MemorySearchArgs struct {
 func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 	// --- memoryAppend ---
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.memoryAppend",
+		Name:        "mesdx.memoryAppend",
 		Description: "Create a new memory element. Scope can be 'project' or 'file'. For file scope, provide the repo-relative file path. Content is the markdown body. Optionally attach symbol references.",
 		InputSchema: memorySchema(MemoryAppendArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemoryAppendArgs) (*mcp.CallToolResult, any, error) {
@@ -91,7 +91,7 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 
 	// --- memoryRead ---
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.memoryRead",
+		Name:        "mesdx.memoryRead",
 		Description: "Read a memory element by ID or path. If neither is provided, lists memories matching the optional scope and file filters.",
 		InputSchema: memorySchema(MemoryReadArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemoryReadArgs) (*mcp.CallToolResult, any, error) {
@@ -133,7 +133,7 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 
 	// --- memoryUpdate ---
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.memoryUpdate",
+		Name:        "mesdx.memoryUpdate",
 		Description: "Update an existing memory element. Provide memoryId and any fields to update (title, content, symbols). Fields not provided are left unchanged.",
 		InputSchema: memorySchema(MemoryUpdateArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemoryUpdateArgs) (*mcp.CallToolResult, any, error) {
@@ -154,7 +154,7 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 
 	// --- memoryDelete ---
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.memoryDelete",
+		Name:        "mesdx.memoryDelete",
 		Description: "Soft-delete a memory element. The file is preserved on disk with status set to 'deleted', but it is excluded from search results.",
 		InputSchema: memorySchema(MemoryDeleteArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemoryDeleteArgs) (*mcp.CallToolResult, any, error) {
@@ -174,7 +174,7 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 
 	// --- memoryGrepReplace ---
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.memoryGrepReplace",
+		Name:        "mesdx.memoryGrepReplace",
 		Description: "Regex find-and-replace in a memory element's body. You must identify the target by memoryId or mdRelPath. If you provide scope/file filters instead and they match multiple memories, the tool will fail and return the candidate list for disambiguation.",
 		InputSchema: memorySchema(MemoryGrepReplaceArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemoryGrepReplaceArgs) (*mcp.CallToolResult, any, error) {
@@ -237,7 +237,7 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 
 	// --- memorySearch ---
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "codeintelx.memorySearch",
+		Name:        "mesdx.memorySearch",
 		Description: "Search memory elements using Bleve full-text search. Memory files are indexed in chunks split by any markdown header (`#` through `######`). Returns ranked results. Deleted memories and memories referencing deleted files are excluded.",
 		InputSchema: memorySchema(MemorySearchArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemorySearchArgs) (*mcp.CallToolResult, any, error) {

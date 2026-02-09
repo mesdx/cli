@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/codeintelx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/symbols"
 )
 
 // Store wraps DB operations for the indexer.
