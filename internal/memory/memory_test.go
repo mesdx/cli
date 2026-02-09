@@ -136,53 +136,6 @@ func TestWriteMarkdownRoundTrip(t *testing.T) {
 	}
 }
 
-// --- Ngram tests ---
-
-func TestTrigramsBasic(t *testing.T) {
-	grams := Trigrams("hello world")
-	if len(grams) == 0 {
-		t.Fatal("expected trigrams, got none")
-	}
-	// "hello world" normalized is "hello world" (11 chars) → 9 unique trigrams
-	// "hel", "ell", "llo", "lo ", "o w", " wo", "wor", "orl", "rld"
-	expected := map[string]bool{
-		"hel": true, "ell": true, "llo": true, "lo ": true,
-		"o w": true, " wo": true, "wor": true, "orl": true, "rld": true,
-	}
-	for _, g := range grams {
-		if !expected[g] {
-			t.Errorf("unexpected trigram %q", g)
-		}
-	}
-}
-
-func TestTrigramsDedup(t *testing.T) {
-	grams := Trigrams("aaa aaa")
-	// "aaa aaa" normalized is "aaa aaa"
-	// "aaa", "aa ", "a a", " aa", "aaa" — "aaa" appears twice, should be deduped
-	seen := map[string]int{}
-	for _, g := range grams {
-		seen[g]++
-	}
-	for g, count := range seen {
-		if count > 1 {
-			t.Errorf("trigram %q appears %d times, expected 1", g, count)
-		}
-	}
-}
-
-func TestTrigramsShortInput(t *testing.T) {
-	grams := Trigrams("ab")
-	if len(grams) != 1 || grams[0] != "ab" {
-		t.Errorf("short input: got %v, want [\"ab\"]", grams)
-	}
-
-	grams = Trigrams("")
-	if len(grams) != 0 {
-		t.Errorf("empty input: got %v, want empty", grams)
-	}
-}
-
 // --- Store + Manager integration tests ---
 
 func TestManagerAppendReadDelete(t *testing.T) {
@@ -190,7 +143,11 @@ func TestManagerAppendReadDelete(t *testing.T) {
 	repoRoot := t.TempDir()
 	memDir := filepath.Join(repoRoot, "memory")
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	// Append
 	elem, err := mgr.Append("project", "", "Test Memory", "This is a test body.", nil)
@@ -246,7 +203,11 @@ func TestManagerUpdate(t *testing.T) {
 	repoRoot := t.TempDir()
 	memDir := filepath.Join(repoRoot, "memory")
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	elem, err := mgr.Append("project", "", "Original Title", "Original body.", nil)
 	if err != nil {
@@ -272,9 +233,13 @@ func TestManagerSearch(t *testing.T) {
 	repoRoot := t.TempDir()
 	memDir := filepath.Join(repoRoot, "memory")
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
-	_, err := mgr.Append("project", "", "Authentication Flow", "How the auth flow works with JWT tokens and refresh.", nil)
+	_, err = mgr.Append("project", "", "Authentication Flow", "How the auth flow works with JWT tokens and refresh.", nil)
 	if err != nil {
 		t.Fatalf("Append 1: %v", err)
 	}
@@ -302,7 +267,11 @@ func TestManagerSearchSkipsDeleted(t *testing.T) {
 	repoRoot := t.TempDir()
 	memDir := filepath.Join(repoRoot, "memory")
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	elem, err := mgr.Append("project", "", "Secret Memory", "This memory should not appear in search.", nil)
 	if err != nil {
@@ -331,7 +300,11 @@ func TestManagerGrepReplace(t *testing.T) {
 	repoRoot := t.TempDir()
 	memDir := filepath.Join(repoRoot, "memory")
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	elem, err := mgr.Append("project", "", "GrepTest", "The foo bar baz and foo again.", nil)
 	if err != nil {
@@ -384,7 +357,11 @@ func TestManagerBulkIndexAndReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	// Bulk index
 	if err := mgr.BulkIndex(); err != nil {
@@ -431,7 +408,11 @@ func TestSalvageMerge(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	// Bulk index should merge the bad file into project.md
 	if err := mgr.BulkIndex(); err != nil {
@@ -465,7 +446,11 @@ func TestManagerFileScoped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mgr := NewManager(d, 1, repoRoot, memDir)
+	mgr, err := NewManager(d, 1, repoRoot, memDir)
+	if err != nil {
+		t.Fatalf("NewManager: %v", err)
+	}
+	defer func() { _ = mgr.Close() }()
 
 	elem, err := mgr.Append("file", "src/main.go", "Main explanation", "How the main function works.", nil)
 	if err != nil {

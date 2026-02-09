@@ -173,7 +173,11 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	// Bulk-index existing memory files (if any exist in the memory dir)
 	cmd.Printf("%s Indexing memory files...\n", infoStyle.Render("→"))
-	memMgr := memory.NewManager(d, idx.Store.ProjectID, repoRoot, memoryDirAbs)
+	memMgr, err := memory.NewManager(d, idx.Store.ProjectID, repoRoot, memoryDirAbs)
+	if err != nil {
+		return fmt.Errorf("failed to initialize memory manager: %w", err)
+	}
+	defer func() { _ = memMgr.Close() }()
 	if err := memMgr.BulkIndex(); err != nil {
 		cmd.Printf("%s Warning: failed to bulk-index memories: %v\n", infoStyle.Render("!"), err)
 	}

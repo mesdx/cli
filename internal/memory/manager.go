@@ -12,17 +12,48 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/codeintelx/cli/internal/search"
 )
 
+// IsIndexLockedError checks if the error is related to an index being locked
+// by another process (e.g., MCP server).
+func IsIndexLockedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	// Bleve typically returns errors containing "lock" when the index is locked
+	return strings.Contains(errStr, "lock") ||
+		strings.Contains(errStr, "locked") ||
+		strings.Contains(errStr, "LOCK")
+}
+
 // Manager orchestrates memory CRUD, indexing, reconciliation, and search.
+// The search index is opened once and kept for the lifetime of the Manager.
+// Callers must call Close() when done to release the underlying Bleve index.
 type Manager struct {
 	Store     *MemoryStore
 	RepoRoot  string
 	MemoryDir string // absolute path to the memory directory
+	searchIdx *search.MemoryIndex
+	ProjectID int64
 }
 
 // NewManager creates a Manager for the given DB, project, and memory dir.
-func NewManager(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) *Manager {
+// The search index is opened in read-write mode and kept open for the
+// lifetime of the Manager. Call Close() when done.
+func NewManager(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) (*Manager, error) {
+	searchBase := filepath.Join(repoRoot, ".codeintelx", "search")
+	if err := search.EnsureIndexDir(searchBase); err != nil {
+		return nil, fmt.Errorf("create search dir: %w", err)
+	}
+
+	idx, err := search.NewMemoryIndex(projectID, searchBase)
+	if err != nil {
+		return nil, fmt.Errorf("open search index: %w", err)
+	}
+
 	return &Manager{
 		Store: &MemoryStore{
 			DB:        db,
@@ -30,7 +61,53 @@ func NewManager(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) *Man
 		},
 		RepoRoot:  repoRoot,
 		MemoryDir: memoryDirAbs,
+		searchIdx: idx,
+		ProjectID: projectID,
+	}, nil
+}
+
+// NewManagerReadOnly creates a Manager whose search index is opened in
+// read-only mode. This is safe to use while another process (e.g. the MCP
+// server) has the index open for writing.
+// Only Search / Read / List operations are expected; write operations that
+// touch the index will return errors.
+func NewManagerReadOnly(db *sql.DB, projectID int64, repoRoot, memoryDirAbs string) (*Manager, error) {
+	searchBase := filepath.Join(repoRoot, ".codeintelx", "search")
+	idx, err := search.NewMemoryIndexReadOnly(projectID, searchBase)
+	if err != nil {
+		return nil, fmt.Errorf("open search index (read-only): %w", err)
 	}
+
+	return &Manager{
+		Store: &MemoryStore{
+			DB:        db,
+			ProjectID: projectID,
+		},
+		RepoRoot:  repoRoot,
+		MemoryDir: memoryDirAbs,
+		searchIdx: idx,
+		ProjectID: projectID,
+	}, nil
+}
+
+// Close releases the underlying search index. Must be called when the
+// Manager is no longer needed.
+func (m *Manager) Close() error {
+	if m == nil {
+		return nil
+	}
+	if m.searchIdx != nil {
+		if err := m.searchIdx.Close(); err != nil {
+			log.Printf("warning: failed to close search index: %v", err)
+			return err
+		}
+	}
+	return nil
+}
+
+// removeFromSearch removes a memory from the search index by mdRelPath.
+func (m *Manager) removeFromSearch(mdRelPath string) error {
+	return m.searchIdx.RemoveByMdRelPath(mdRelPath)
 }
 
 // MemoryElement is a fully-loaded memory element (frontmatter + body + paths).
@@ -58,6 +135,12 @@ func (m *Manager) Append(scope, filePath, title, body string, symbols []SymbolRe
 	if scope == "file" && filePath == "" {
 		return nil, fmt.Errorf("file path is required for file-scoped memories")
 	}
+	if scope == "file" {
+		absRef := filepath.Join(m.RepoRoot, filePath)
+		if _, err := os.Stat(absRef); err != nil {
+			return nil, fmt.Errorf("referenced file does not exist: %s", filePath)
+		}
+	}
 
 	meta := NewMeta(scope, filePath, title, symbols)
 
@@ -82,8 +165,11 @@ func (m *Manager) Append(scope, filePath, title, body string, symbols []SymbolRe
 
 	// Index in DB
 	hash := hashBytes(data)
-	if _, err := m.Store.UpsertMemory(meta, mdRelPath, hash, body); err != nil {
+	if _, err := m.Store.UpsertMemory(meta, mdRelPath, hash); err != nil {
 		return nil, fmt.Errorf("upsert memory: %w", err)
+	}
+	if err := m.indexToSearch(meta, mdRelPath, body); err != nil {
+		return nil, fmt.Errorf("index memory for search: %w", err)
 	}
 
 	return &MemoryElement{
@@ -171,8 +257,11 @@ func (m *Manager) Update(memoryUID string, title *string, body *string, symbols 
 	}
 
 	hash := hashBytes(newData)
-	if _, err := m.Store.UpsertMemory(meta, row.MdRelPath, hash, existingBody); err != nil {
+	if _, err := m.Store.UpsertMemory(meta, row.MdRelPath, hash); err != nil {
 		return nil, fmt.Errorf("upsert memory: %w", err)
+	}
+	if err := m.indexToSearch(meta, row.MdRelPath, existingBody); err != nil {
+		return nil, fmt.Errorf("index memory for search: %w", err)
 	}
 
 	return &MemoryElement{
@@ -184,7 +273,7 @@ func (m *Manager) Update(memoryUID string, title *string, body *string, symbols 
 }
 
 // Delete soft-deletes a memory: marks status=deleted in frontmatter and DB,
-// removes ngrams, but keeps the file on disk.
+// removes it from the search index, but keeps the file on disk.
 func (m *Manager) Delete(memoryUID string) error {
 	row, err := m.Store.GetByUID(memoryUID)
 	if err != nil {
@@ -216,7 +305,12 @@ func (m *Manager) Delete(memoryUID string) error {
 		log.Printf("warning: failed to update frontmatter on disk: %v", err)
 	}
 
-	return m.Store.SoftDeleteMemory(memoryUID)
+	if err := m.Store.SoftDeleteMemory(memoryUID); err != nil {
+		return err
+	}
+	// Best-effort remove from search by path.
+	_ = m.removeFromSearch(row.MdRelPath)
+	return nil
 }
 
 // GrepReplace performs a regex find-and-replace on the body of a single memory.
@@ -275,8 +369,11 @@ func (m *Manager) GrepReplace(memoryUID, mdRelPath, pattern, replacement string)
 	}
 
 	hash := hashBytes(newData)
-	if _, err := m.Store.UpsertMemory(meta, row.MdRelPath, hash, newBody); err != nil {
+	if _, err := m.Store.UpsertMemory(meta, row.MdRelPath, hash); err != nil {
 		return nil, fmt.Errorf("upsert memory: %w", err)
+	}
+	if err := m.indexToSearch(meta, row.MdRelPath, newBody); err != nil {
+		return nil, fmt.Errorf("index memory for search: %w", err)
 	}
 
 	return &GrepReplaceResult{
@@ -286,12 +383,33 @@ func (m *Manager) GrepReplace(memoryUID, mdRelPath, pattern, replacement string)
 	}, nil
 }
 
-// Search performs an ngram-based search over memory elements.
+// Search performs a full-text search over memory elements.
 func (m *Manager) Search(query, scope, filePath string, limit int) ([]SearchResult, error) {
 	if limit <= 0 {
 		limit = 20
 	}
-	return m.Store.SearchMemories(query, scope, filePath, limit)
+
+	hits, err := m.searchIdx.Search(query, scope, filePath, limit)
+	if err != nil {
+		return nil, err
+	}
+	results := make([]SearchResult, 0, len(hits))
+	for _, h := range hits {
+		results = append(results, SearchResult{
+			MemoryRow: MemoryRow{
+				MemoryUID:  h.MemoryUID,
+				Scope:      h.Scope,
+				FilePath:   h.FilePath,
+				MdRelPath:  h.MdRelPath,
+				Title:      h.Title,
+				Status:     "active",
+				FileStatus: "active",
+			},
+			Score:   h.Score,
+			Snippet: h.Snippet,
+		})
+	}
+	return results, nil
 }
 
 // --- Indexing ---
@@ -301,6 +419,10 @@ func (m *Manager) Search(query, scope, filePath string, limit int) ([]SearchResu
 func (m *Manager) BulkIndex() error {
 	if err := os.MkdirAll(m.MemoryDir, 0755); err != nil {
 		return fmt.Errorf("create memory dir: %w", err)
+	}
+
+	if err := m.searchIdx.Reset(); err != nil {
+		return fmt.Errorf("reset memory search index: %w", err)
 	}
 
 	return filepath.Walk(m.MemoryDir, func(path string, info os.FileInfo, err error) error {
@@ -340,8 +462,18 @@ func (m *Manager) IndexFile(absPath string) error {
 	}
 
 	hash := hashBytes(data)
-	_, err = m.Store.UpsertMemory(meta, mdRelPath, hash, body)
-	return err
+	// Determine "validity" for indexing.
+	if meta.Scope == "file" && meta.File != "" {
+		repoFile := filepath.Join(m.RepoRoot, meta.File)
+		if _, err := os.Stat(repoFile); os.IsNotExist(err) {
+			meta.FileStatus = "deleted"
+		}
+	}
+
+	if _, err := m.Store.UpsertMemory(meta, mdRelPath, hash); err != nil {
+		return err
+	}
+	return m.indexToSearch(meta, mdRelPath, body)
 }
 
 // RemoveFile handles deletion of a memory markdown file from disk.
@@ -351,6 +483,7 @@ func (m *Manager) RemoveFile(absPath string) error {
 	if err != nil {
 		return err
 	}
+	_ = m.removeFromSearch(mdRelPath)
 	return m.Store.DeleteByMdRelPath(mdRelPath)
 }
 
@@ -372,6 +505,7 @@ func (m *Manager) Reconcile() error {
 			if err := m.Store.DeleteByMdRelPath(mdRelPath); err != nil {
 				log.Printf("memory: failed to delete stale entry %s: %v", mdRelPath, err)
 			}
+			_ = m.removeFromSearch(mdRelPath)
 			continue
 		}
 
@@ -401,13 +535,11 @@ func (m *Manager) Reconcile() error {
 					meta.FileStatus = "deleted"
 					changed = true
 				}
-				// Update DB — also remove ngrams so it won't appear in searches
+				// Update DB — also remove from search so it won't appear in results
 				if err := m.Store.UpdateFileStatus(row.ID, "deleted"); err != nil {
 					log.Printf("memory: failed to update file_status for %s: %v", mdRelPath, err)
 				}
-				if err := m.Store.RemoveNgrams(row.ID); err != nil {
-					log.Printf("memory: failed to remove ngrams for %s: %v", mdRelPath, err)
-				}
+				_ = m.removeFromSearch(mdRelPath)
 			} else if meta.FileStatus == "deleted" {
 				// File was restored
 				meta.FileStatus = "active"
@@ -415,6 +547,7 @@ func (m *Manager) Reconcile() error {
 				if err := m.Store.UpdateFileStatus(row.ID, "active"); err != nil {
 					log.Printf("memory: failed to restore file_status for %s: %v", mdRelPath, err)
 				}
+				_ = m.indexToSearch(meta, mdRelPath, body)
 			}
 		}
 
@@ -452,6 +585,56 @@ func (m *Manager) Reconcile() error {
 		}
 	}
 
+	return nil
+}
+
+// ReconcileFileRef reconciles memories that reference a specific repo-relative file path.
+// This is used by fsnotify-driven reconciliation when source files are created/removed.
+func (m *Manager) ReconcileFileRef(fileRelPath string) error {
+	rows, err := m.Store.ListMemories("file", fileRelPath)
+	if err != nil {
+		return err
+	}
+	for _, r := range rows {
+		absPath := filepath.Join(m.MemoryDir, r.MdRelPath)
+		data, err := os.ReadFile(absPath)
+		if err != nil {
+			// If the memory file itself vanished, let memory watcher clean it up.
+			continue
+		}
+		meta, body, err := ParseMarkdown(data)
+		if err != nil {
+			continue
+		}
+
+		repoFile := filepath.Join(m.RepoRoot, meta.File)
+		_, statErr := os.Stat(repoFile)
+		fileExists := statErr == nil
+
+		changed := false
+		if !fileExists {
+			if meta.FileStatus != "deleted" {
+				meta.FileStatus = "deleted"
+				changed = true
+			}
+			_ = m.Store.UpdateFileStatus(r.ID, "deleted")
+			_ = m.removeFromSearch(r.MdRelPath)
+		} else {
+			if meta.FileStatus == "deleted" {
+				meta.FileStatus = "active"
+				changed = true
+				_ = m.Store.UpdateFileStatus(r.ID, "active")
+			}
+			_ = m.indexToSearch(meta, r.MdRelPath, body)
+		}
+
+		if changed {
+			newData, err := WriteMarkdown(meta, body)
+			if err == nil {
+				_ = os.WriteFile(absPath, newData, 0644)
+			}
+		}
+	}
 	return nil
 }
 
@@ -505,8 +688,10 @@ func (m *Manager) salvageMerge(sourceMdRelPath, content string) error {
 
 	// Re-index project.md
 	hash := hashBytes(newData)
-	_, err = m.Store.UpsertMemory(meta, projectMdFilename, hash, existingBody)
-	return err
+	if _, err := m.Store.UpsertMemory(meta, projectMdFilename, hash); err != nil {
+		return err
+	}
+	return m.indexToSearch(meta, projectMdFilename, existingBody)
 }
 
 // --- Helpers ---
@@ -599,4 +784,45 @@ func (m *Manager) loadElement(row *MemoryRow) (*MemoryElement, error) {
 		MdRelPath: row.MdRelPath,
 		AbsPath:   absPath,
 	}, nil
+}
+
+func (m *Manager) indexToSearch(meta *CodeintelxMeta, mdRelPath, body string) error {
+	if meta == nil {
+		return nil
+	}
+
+	// Exclude deleted from index.
+	if meta.Status == "deleted" || meta.FileStatus == "deleted" {
+		return m.searchIdx.RemoveByMdRelPath(mdRelPath)
+	}
+
+	// Validity: file-scoped memories must reference an existing file.
+	if meta.Scope == "file" {
+		if meta.File == "" {
+			return m.searchIdx.RemoveByMdRelPath(mdRelPath)
+		}
+		repoFile := filepath.Join(m.RepoRoot, meta.File)
+		if _, err := os.Stat(repoFile); err != nil {
+			return m.searchIdx.RemoveByMdRelPath(mdRelPath)
+		}
+	}
+
+	symbols := make([]string, 0, len(meta.Symbols))
+	for _, s := range meta.Symbols {
+		if s.Name != "" {
+			symbols = append(symbols, s.Name)
+		}
+	}
+
+	return m.searchIdx.IndexMemory(
+		meta.ID,
+		meta.Scope,
+		meta.File,
+		mdRelPath,
+		meta.Title,
+		meta.Status,
+		meta.FileStatus,
+		body,
+		symbols,
+	)
 }

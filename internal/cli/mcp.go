@@ -14,6 +14,7 @@ import (
 	"github.com/codeintelx/cli/internal/config"
 	"github.com/codeintelx/cli/internal/db"
 	"github.com/codeintelx/cli/internal/indexer"
+	"github.com/codeintelx/cli/internal/mcpstate"
 	"github.com/codeintelx/cli/internal/memory"
 	"github.com/codeintelx/cli/internal/repo"
 	"github.com/fsnotify/fsnotify"
@@ -114,6 +115,17 @@ func runMcp(cmd *cobra.Command, args []string) error {
 
 	codeintelxDir := repo.CodeintelxDir(repoRoot)
 
+	// Create MCP state file to indicate server is running
+	if err := mcpstate.CreateStateFile(codeintelxDir); err != nil {
+		return fmt.Errorf("failed to create MCP state file: %w", err)
+	}
+	// Ensure state file is removed on exit
+	defer func() {
+		if err := mcpstate.RemoveStateFile(codeintelxDir); err != nil {
+			log.Printf("warning: failed to remove MCP state file: %v", err)
+		}
+	}()
+
 	// Redirect all logging to .codeintelx/mcp.log so nothing leaks into
 	// the stdio JSON-RPC transport.
 	if err := initMCPLog(codeintelxDir); err != nil {
@@ -163,23 +175,37 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		if !filepath.IsAbs(memDirAbs) {
 			memDirAbs = filepath.Join(repoRoot, memDirAbs)
 		}
-		memMgr = memory.NewManager(d, idx.Store.ProjectID, repoRoot, memDirAbs)
+		var memErr error
+		memMgr, memErr = memory.NewManager(d, idx.Store.ProjectID, repoRoot, memDirAbs)
+		if memErr != nil {
+			log.Printf("memory manager init error: %v", memErr)
+			memMgr = nil
+		}
 
 		// Bulk-index existing memory files
-		if err := memMgr.BulkIndex(); err != nil {
-			log.Printf("memory bulk index error: %v", err)
-		}
-		// Reconcile file/symbol statuses
-		if err := memMgr.Reconcile(); err != nil {
-			log.Printf("memory reconcile error: %v", err)
+		if memMgr != nil {
+			if err := memMgr.BulkIndex(); err != nil {
+				log.Printf("memory bulk index error: %v", err)
+			}
+			// Reconcile file/symbol statuses
+			if err := memMgr.Reconcile(); err != nil {
+				log.Printf("memory reconcile error: %v", err)
+			}
 		}
 	}
+	defer func() {
+		if memMgr != nil {
+			if err := memMgr.Close(); err != nil {
+				log.Printf("failed to close memory manager: %v", err)
+			}
+		}
+	}()
 
 	// Start file watcher in background
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go startFileWatcher(ctx, idx, cfg, repoRoot)
+	go startFileWatcher(ctx, idx, cfg, repoRoot, memMgr)
 
 	// Start memory dir watcher in background (if configured)
 	if memMgr != nil {
@@ -569,7 +595,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 }
 
 // startFileWatcher watches source roots for file changes and incrementally updates the index.
-func startFileWatcher(ctx context.Context, idx *indexer.Indexer, cfg *config.Config, repoRoot string) {
+func startFileWatcher(ctx context.Context, idx *indexer.Indexer, cfg *config.Config, repoRoot string, memMgr *memory.Manager) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Printf("fsnotify: failed to create watcher: %v", err)
@@ -610,6 +636,11 @@ func startFileWatcher(ctx context.Context, idx *indexer.Indexer, cfg *config.Con
 				if err := idx.RemoveSingleFile(path); err != nil {
 					log.Printf("failed to remove %s: %v", path, err)
 				}
+				if memMgr != nil {
+					if rel, err := filepath.Rel(repoRoot, path); err == nil && !strings.HasPrefix(rel, "..") {
+						_ = memMgr.ReconcileFileRef(filepath.ToSlash(rel))
+					}
+				}
 				continue
 			}
 			if info.IsDir() {
@@ -619,6 +650,11 @@ func startFileWatcher(ctx context.Context, idx *indexer.Indexer, cfg *config.Con
 			}
 			if _, err := idx.IndexSingleFile(path); err != nil {
 				log.Printf("failed to index %s: %v", path, err)
+			}
+			if memMgr != nil {
+				if rel, err := filepath.Rel(repoRoot, path); err == nil && !strings.HasPrefix(rel, "..") {
+					_ = memMgr.ReconcileFileRef(filepath.ToSlash(rel))
+				}
 			}
 		}
 	}

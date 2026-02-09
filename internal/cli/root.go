@@ -16,6 +16,9 @@ func NewRootCmd() *cobra.Command {
 		Short:   "Code intelligence CLI and MCP server",
 		Long:    "Codeintelx is a CLI tool for indexing codebases and exposing code intelligence via MCP.",
 		Version: Version,
+		// SilenceErrors prevents Cobra from printing errors twice
+		// (once by the command, once by the root)
+		SilenceErrors: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// Skip self-update for the mcp command (daemon-like usage)
 			if cmd.Name() == "mcp" {
@@ -30,6 +33,7 @@ func NewRootCmd() *cobra.Command {
 
 	rootCmd.AddCommand(newInitCmd())
 	rootCmd.AddCommand(newMcpCmd())
+	rootCmd.AddCommand(newMemoryCmd())
 
 	return rootCmd
 }

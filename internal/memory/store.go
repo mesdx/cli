@@ -3,7 +3,6 @@ package memory
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 )
 
@@ -35,8 +34,8 @@ type SearchResult struct {
 	Snippet string  `json:"snippet,omitempty"`
 }
 
-// UpsertMemory inserts or updates a memory record and its symbols + ngrams.
-func (s *MemoryStore) UpsertMemory(meta *CodeintelxMeta, mdRelPath, bodyHash string, bodyText string) (int64, error) {
+// UpsertMemory inserts or updates a memory record and its symbols.
+func (s *MemoryStore) UpsertMemory(meta *CodeintelxMeta, mdRelPath, bodyHash string) (int64, error) {
 	tx, err := s.DB.Begin()
 	if err != nil {
 		return 0, err
@@ -72,11 +71,8 @@ func (s *MemoryStore) UpsertMemory(meta *CodeintelxMeta, mdRelPath, bodyHash str
 		if err != nil {
 			return 0, fmt.Errorf("update memory: %w", err)
 		}
-		// Delete old symbols and ngrams
+		// Delete old symbols
 		if _, err := tx.Exec(`DELETE FROM memory_symbols WHERE memory_id = ?`, rowID); err != nil {
-			return 0, err
-		}
-		if _, err := tx.Exec(`DELETE FROM memory_ngrams WHERE memory_id = ?`, rowID); err != nil {
 			return 0, err
 		}
 	}
@@ -91,26 +87,10 @@ func (s *MemoryStore) UpsertMemory(meta *CodeintelxMeta, mdRelPath, bodyHash str
 		}
 	}
 
-	// Insert ngrams from body + title + symbol names
-	indexText := meta.Title + " " + bodyText
-	for _, sym := range meta.Symbols {
-		indexText += " " + sym.Name
-	}
-	grams := Trigrams(indexText)
-	for _, gram := range grams {
-		if _, err := tx.Exec(
-			`INSERT INTO memory_ngrams (memory_id, gram) VALUES (?, ?)`,
-			rowID, gram,
-		); err != nil {
-			return 0, fmt.Errorf("insert memory ngram: %w", err)
-		}
-	}
-
 	return rowID, tx.Commit()
 }
 
-// SoftDeleteMemory marks a memory as deleted and removes its ngrams so it
-// won't appear in search results. The file content is preserved.
+// SoftDeleteMemory marks a memory as deleted. The file content is preserved.
 func (s *MemoryStore) SoftDeleteMemory(memoryUID string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	res, err := s.DB.Exec(
@@ -124,13 +104,7 @@ func (s *MemoryStore) SoftDeleteMemory(memoryUID string) error {
 	if n == 0 {
 		return fmt.Errorf("memory %q not found", memoryUID)
 	}
-
-	// Remove ngrams so it doesn't appear in search
-	_, err = s.DB.Exec(
-		`DELETE FROM memory_ngrams WHERE memory_id IN (SELECT id FROM memories WHERE project_id=? AND memory_uid=?)`,
-		s.ProjectID, memoryUID,
-	)
-	return err
+	return nil
 }
 
 // GetByUID returns a memory row by its UID.
@@ -236,76 +210,8 @@ func (s *MemoryStore) DeleteByMdRelPath(mdRelPath string) error {
 	if _, err := s.DB.Exec(`DELETE FROM memory_symbols WHERE memory_id = ?`, rowID); err != nil {
 		return err
 	}
-	if _, err := s.DB.Exec(`DELETE FROM memory_ngrams WHERE memory_id = ?`, rowID); err != nil {
-		return err
-	}
 	_, err = s.DB.Exec(`DELETE FROM memories WHERE id = ?`, rowID)
 	return err
-}
-
-// SearchMemories performs an ngram-based search, returning ranked results.
-// Memories with status='deleted' or file_status='deleted' are excluded.
-func (s *MemoryStore) SearchMemories(queryText, scope, filePath string, limit int) ([]SearchResult, error) {
-	grams := Trigrams(queryText)
-	if len(grams) == 0 {
-		return nil, nil
-	}
-
-	// Build placeholders for IN clause
-	placeholders := make([]string, len(grams))
-	args := make([]interface{}, 0, len(grams)+4)
-	for i, g := range grams {
-		placeholders[i] = "?"
-		args = append(args, g)
-	}
-	args = append(args, s.ProjectID)
-
-	query := fmt.Sprintf(`
-		SELECT m.id, m.memory_uid, m.scope, m.file_path, m.md_rel_path, m.title,
-		       m.status, m.file_status, m.body_hash, m.created_at, m.updated_at,
-		       COUNT(DISTINCT ng.gram) as matches
-		FROM memories m
-		JOIN memory_ngrams ng ON ng.memory_id = m.id
-		WHERE ng.gram IN (%s)
-		  AND m.project_id = ?
-		  AND m.status != 'deleted'
-		  AND m.file_status != 'deleted'`,
-		strings.Join(placeholders, ","))
-
-	if scope != "" {
-		query += ` AND m.scope = ?`
-		args = append(args, scope)
-	}
-	if filePath != "" {
-		query += ` AND m.file_path = ?`
-		args = append(args, filePath)
-	}
-
-	query += ` GROUP BY m.id ORDER BY matches DESC`
-	if limit > 0 {
-		query += fmt.Sprintf(` LIMIT %d`, limit)
-	}
-
-	rows, err := s.DB.Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("search memories: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	totalGrams := float64(len(grams))
-	var results []SearchResult
-	for rows.Next() {
-		var r SearchResult
-		var matches int
-		if err := rows.Scan(&r.ID, &r.MemoryUID, &r.Scope, &r.FilePath, &r.MdRelPath,
-			&r.Title, &r.Status, &r.FileStatus, &r.BodyHash, &r.CreatedAt, &r.UpdatedAt,
-			&matches); err != nil {
-			return nil, err
-		}
-		r.Score = float64(matches) / totalGrams
-		results = append(results, r)
-	}
-	return results, rows.Err()
 }
 
 // UpdateFileStatus updates the file_status for a memory.
@@ -342,11 +248,5 @@ func (s *MemoryStore) UpdateSymbolStatus(memoryRowID int64, language, name, stat
 		`UPDATE memory_symbols SET status=?, last_resolved_at=? WHERE memory_id=? AND language=? AND name=?`,
 		status, now, memoryRowID, language, name,
 	)
-	return err
-}
-
-// RemoveNgrams removes all ngrams for a memory (used when marking deleted).
-func (s *MemoryStore) RemoveNgrams(memoryRowID int64) error {
-	_, err := s.DB.Exec(`DELETE FROM memory_ngrams WHERE memory_id = ?`, memoryRowID)
 	return err
 }

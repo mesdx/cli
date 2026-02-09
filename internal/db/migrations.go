@@ -123,16 +123,6 @@ var migrations = []migration{
 				FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
 			);
 			CREATE INDEX IF NOT EXISTS idx_memory_symbols_memory ON memory_symbols(memory_id);
-
-			-- Ngram tokens for memory search
-			CREATE TABLE IF NOT EXISTS memory_ngrams (
-				id INTEGER PRIMARY KEY AUTOINCREMENT,
-				memory_id INTEGER NOT NULL,
-				gram TEXT NOT NULL,
-				FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
-			);
-			CREATE INDEX IF NOT EXISTS idx_memory_ngrams_gram ON memory_ngrams(gram);
-			CREATE INDEX IF NOT EXISTS idx_memory_ngrams_memory ON memory_ngrams(memory_id);
 		`,
 	},
 }

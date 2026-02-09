@@ -238,7 +238,7 @@ func registerMemoryTools(server *mcp.Server, mgr *memory.Manager) {
 	// --- memorySearch ---
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "codeintelx.memorySearch",
-		Description: "Search memory elements using ngram-based text matching. Returns ranked results. Deleted memories and memories referencing deleted files are excluded.",
+		Description: "Search memory elements using Bleve full-text search. Memory files are indexed in chunks split by any markdown header (`#` through `######`). Returns ranked results. Deleted memories and memories referencing deleted files are excluded.",
 		InputSchema: memorySchema(MemorySearchArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args MemorySearchArgs) (*mcp.CallToolResult, any, error) {
 		if args.Query == "" {
@@ -481,6 +481,9 @@ func formatSearchResults(results []memory.SearchResult) string {
 			fmt.Fprintf(&b, " title=%q", r.Title)
 		}
 		fmt.Fprintf(&b, "\n   path: %s\n", r.MdRelPath)
+		if r.Snippet != "" {
+			fmt.Fprintf(&b, "   snippet: %s\n", r.Snippet)
+		}
 	}
 	return b.String()
 }
