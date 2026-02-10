@@ -81,7 +81,3 @@ bin/
 
 # mesdx
 .mesdx/
-
-# Tree-sitter grammar submodules (tracked via .gitmodules)
-# Uncommitted changes in submodules should be ignored
-third_party/*/
