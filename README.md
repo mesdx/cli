@@ -133,4 +133,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution gu
 
 ## License
 
-This project is licensed under the **Functional Source License, Version 1.1, ALv2 Future License** (**FSL-1.1-ALv2**). See [`LICENSE`](LICENSE).
+This project is licensed under AGPL-3.0.
+
+If you modify and run it as a network service, you must publish your changes.
+This ensures improvements remain open for everyone.
+
+See [`LICENSE`](LICENSE).
