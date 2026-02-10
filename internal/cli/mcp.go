@@ -87,6 +87,11 @@ func newMcpCmd() *cobra.Command {
 }
 
 func runMcp(cmd *cobra.Command, args []string) error {
+	// Verify parser libraries are available
+	if err := indexer.VerifyParsersAvailable(); err != nil {
+		return err
+	}
+
 	// Change working directory if --cwd is provided
 	cwd, err := cmd.Flags().GetString("cwd")
 	if err != nil {

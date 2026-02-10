@@ -24,73 +24,112 @@ Supported languages: **Go, Java, Rust, Python, TypeScript, JavaScript**.
 
 ## Installation
 
-### 1. Install MesDX Binary
+### Quick Install (Recommended)
 
-Download the pre-built binary for your platform from the [latest release](https://github.com/mesdx/cli/releases/latest).
+Use our install scripts that handle everything automatically:
 
 **macOS (Apple Silicon):**
 ```bash
-install_dir="$HOME/.local/bin"
-mkdir -p "$install_dir"
-curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-arm64 -o "$install_dir/mesdx"
-chmod +x "$install_dir/mesdx"
+# Install latest version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-darwin-arm64.sh | bash
+
+# Install specific version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-darwin-arm64.sh | bash -s v0.3.0
 ```
 
 **macOS (Intel):**
 ```bash
-install_dir="$HOME/.local/bin"
-mkdir -p "$install_dir"
-curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-amd64 -o "$install_dir/mesdx"
-chmod +x "$install_dir/mesdx"
+# Install latest version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-darwin-amd64.sh | bash
+
+# Install specific version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-darwin-amd64.sh | bash -s v0.3.0
 ```
 
-**Linux:**
+**Linux (AMD64):**
 ```bash
-install_dir="$HOME/.local/bin"
-mkdir -p "$install_dir"
+# Install latest version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-linux-amd64.sh | bash
 
-# Choose ONE:
-# AMD64
-curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-linux-amd64 -o "$install_dir/mesdx"
-
-# ARM64
-# curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-linux-arm64 -o "$install_dir/mesdx"
-
-chmod +x "$install_dir/mesdx"
+# Install specific version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-linux-amd64.sh | bash -s v0.3.0
 ```
 
-Make sure `~/.local/bin` is on your `PATH`:
+**Linux (ARM64):**
+```bash
+# Install latest version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-linux-arm64.sh | bash
+
+# Install specific version
+curl -sSL https://raw.githubusercontent.com/mesdx/cli/main/scripts/install-linux-arm64.sh | bash -s v0.3.0
+```
+
+The install script will:
+- Download the binary to `~/.local/bin/mesdx`
+- Download parser libraries to `~/.local/lib/mesdx/parsers`
+- Make the binary executable
+
+### Add to PATH
+
+Make sure `~/.local/bin` is in your PATH:
 
 **zsh:**
 ```bash
-echo -e '\nexport PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
 **bash:**
 ```bash
-echo -e '\nexport PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-Verify installation:
+### Verify Installation
+
 ```bash
 mesdx --version
 ```
 
-**Optional: Verify checksum**
+### Manual Installation
 
-For security, you can verify the SHA256 checksum:
+If you prefer manual installation:
+
+**Latest version:**
+1. Download the binary for your platform from [latest release](https://github.com/mesdx/cli/releases/latest)
+2. Download the parser tarball for your platform
+3. Extract binary to `~/.local/bin/`
+4. Extract parsers to `~/.local/lib/mesdx/parsers/`
+5. Make the binary executable: `chmod +x ~/.local/bin/mesdx`
+
+**Specific version:**
+1. Visit the [releases page](https://github.com/mesdx/cli/releases) and find your desired version
+2. Download the binary for your platform (e.g., `mesdx-darwin-arm64` for version `v0.3.0`)
+3. Download the parser tarball for your platform (e.g., `mesdx-parsers-darwin-arm64.tar.gz`)
+4. Extract binary to `~/.local/bin/mesdx`
+5. Extract parsers to `~/.local/lib/mesdx/parsers/`
+6. Make the binary executable: `chmod +x ~/.local/bin/mesdx`
+
+**Example for version v0.3.0 on macOS (Apple Silicon):**
+```bash
+install_dir="$HOME/.local/bin"
+parser_dir="$HOME/.local/lib/mesdx/parsers"
+mkdir -p "$install_dir" "$parser_dir"
+
+# Download binary
+curl -L https://github.com/mesdx/cli/releases/download/v0.3.0/mesdx-darwin-arm64 -o "$install_dir/mesdx"
+chmod +x "$install_dir/mesdx"
+
+# Download and extract parsers
+curl -L https://github.com/mesdx/cli/releases/download/v0.3.0/mesdx-parsers-darwin-arm64.tar.gz | tar xz -C "$parser_dir" --strip-components=1
+```
+
+### Custom Parser Directory
+
+By default, MesDX looks for parsers in `~/.local/lib/mesdx/parsers`. To use a custom location:
 
 ```bash
-# Download the checksum file
-curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-arm64.sha256 -o /tmp/mesdx.sha256
-
-# Verify (macOS)
-cd "$install_dir" && shasum -a 256 -c /tmp/mesdx.sha256
-
-# Verify (Linux)
-cd "$install_dir" && sha256sum -c /tmp/mesdx.sha256
+export MESDX_PARSER_DIR=/path/to/your/parsers
 ```
 
 ### 2. Add to Claude Code

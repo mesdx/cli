@@ -1,87 +1,127 @@
-name: Release
+name: Build and Release
 
 on:
   push:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-and-release:
+    name: Build (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
         include:
-          - os: ubuntu-latest
-            goos: linux
-            goarch: amd64
-            artifact_name: mesdx-linux-amd64
-          - os: ubuntu-latest
-            goos: linux
-            goarch: arm64
-            artifact_name: mesdx-linux-arm64
-          - os: macos-14
-            goos: darwin
-            goarch: amd64
-            artifact_name: mesdx-darwin-amd64
-          - os: macos-14
-            goos: darwin
-            goarch: arm64
-            artifact_name: mesdx-darwin-arm64
-
+          # macOS builds
+          - os: darwin
+            arch: arm64
+            runner: macos-14
+          - os: darwin
+            arch: amd64
+            runner: macos-13
+          # Linux builds
+          - os: linux
+            arch: amd64
+            runner: ubuntu-latest
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+        with:
+          submodules: recursive
+      
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21'
-
-      - name: Get version from tag
-        id: get_version
+          go-version: '1.25'
+      
+      - name: Set up build tools
         run: |
-          VERSION=${GITHUB_REF#refs/tags/}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build
+          if [ "${{ matrix.os }}" = "darwin" ]; then
+            xcode-select --install 2>/dev/null || true
+          else
+            sudo apt-get update
+            sudo apt-get install -y build-essential
+          fi
+      
+      - name: Setup tree-sitter headers
+        run: bash scripts/setup-tree-sitter.sh
+      
+      - name: Build parser libraries
+        run: bash scripts/build-parsers.sh
+      
+      - name: Build Go binary
         env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          VERSION: ${{ steps.get_version.outputs.version }}
+          GOOS: ${{ matrix.os }}
+          GOARCH: ${{ matrix.arch }}
         run: |
-          go build -ldflags="-s -w -X github.com/mesdx/cli/internal/cli.version=$VERSION" -o ${{ matrix.artifact_name }} ./cmd/mesdx
-
-      - name: Upload artifact
+          go build -o dist/mesdx-${{ matrix.os }}-${{ matrix.arch }} ./cmd/mesdx
+      
+      - name: Package release
+        run: |
+          cd dist
+          # Create binary checksum
+          sha256sum mesdx-${{ matrix.os }}-${{ matrix.arch }} > mesdx-${{ matrix.os }}-${{ matrix.arch }}.sha256
+          
+          # Create parser tarball
+          tar czf mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz parsers/
+          sha256sum mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz > mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
+      
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_name }}
-          retention-days: 30
+          name: mesdx-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            dist/mesdx-${{ matrix.os }}-${{ matrix.arch }}
+            dist/mesdx-${{ matrix.os }}-${{ matrix.arch }}.sha256
+            dist/mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
+            dist/mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
+          retention-days: 1
 
   release:
-    needs: build
+    name: Create Release
+    needs: build-and-release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
+      
+      - name: Check if prerelease
+        id: prerelease
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$TAG" =~ (rc|test) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Tag contains 'rc' or 'test' - marking as prerelease"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Stable release"
+          fi
+      
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: ./artifacts
-
-      - name: Create checksums
-        working-directory: ./artifacts
+          path: artifacts
+      
+      - name: Prepare release assets
         run: |
-          find . -type f -name "mesdx-*" ! -name "*.sha256" -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
-
+          mkdir -p release-assets
+          find artifacts -type f -exec cp {} release-assets/ \;
+          ls -lh release-assets/
+      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ./artifacts/**/*
+          files: release-assets/*
+          draft: false
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

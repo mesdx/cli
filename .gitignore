@@ -4,9 +4,11 @@
 *.exe
 *.exe~
 *.dll
-*.so
-*.dylib
 mesdx-*
+
+# Parser libraries (built, not checked in)
+dist/parsers/*.so
+dist/parsers/*.dylib
 
 # Test binary, built with `go test -c`
 *.test
@@ -79,3 +81,7 @@ bin/
 
 # mesdx
 .mesdx/
+
+# Tree-sitter grammar submodules (tracked via .gitmodules)
+# Uncommitted changes in submodules should be ignored
+third_party/*/

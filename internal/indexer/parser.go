@@ -1,6 +1,11 @@
 package indexer
 
-import "github.com/mesdx/cli/internal/symbols"
+import (
+	"fmt"
+
+	"github.com/mesdx/cli/internal/symbols"
+	"github.com/mesdx/cli/internal/treesitter"
+)
 
 // Parser extracts symbols and references from source code.
 type Parser interface {
@@ -12,15 +17,26 @@ type Parser interface {
 var parserRegistry = map[Lang]Parser{}
 
 func init() {
-	parserRegistry[LangGo] = &GoParser{}
-	parserRegistry[LangJava] = &JavaParser{}
-	parserRegistry[LangRust] = &RustParser{}
-	parserRegistry[LangPython] = &PythonParser{}
-	parserRegistry[LangTypeScript] = &TypeScriptParser{}
-	parserRegistry[LangJavaScript] = &TypeScriptParser{} // JS uses the same regex patterns
+	// Use tree-sitter parsers for all languages
+	parserRegistry[LangGo] = NewTreeSitterParser("go")
+	parserRegistry[LangJava] = NewTreeSitterParser("java")
+	parserRegistry[LangRust] = NewTreeSitterParser("rust")
+	parserRegistry[LangPython] = NewTreeSitterParser("python")
+	parserRegistry[LangTypeScript] = NewTreeSitterParser("typescript")
+	parserRegistry[LangJavaScript] = NewTreeSitterParser("javascript")
 }
 
 // GetParser returns the parser for the given language, or nil if unsupported.
 func GetParser(lang Lang) Parser {
 	return parserRegistry[lang]
+}
+
+// VerifyParsersAvailable checks that all required parser libraries are available.
+// This should be called at startup to fail fast if libraries are missing.
+func VerifyParsersAvailable() error {
+	required := treesitter.RequiredLanguages()
+	if err := treesitter.VerifyLanguages(required); err != nil {
+		return fmt.Errorf("parser library verification failed: %w\n\nPlease install parser libraries. Run:\n  mesdx --help\nfor installation instructions", err)
+	}
+	return nil
 }

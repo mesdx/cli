@@ -35,6 +35,11 @@ func newInitCmd() *cobra.Command {
 }
 
 func runInit(cmd *cobra.Command, args []string) error {
+	// Verify parser libraries are available
+	if err := indexer.VerifyParsersAvailable(); err != nil {
+		return err
+	}
+
 	// Detect repo root
 	repoRoot, err := repo.FindRoot()
 	if err != nil {
