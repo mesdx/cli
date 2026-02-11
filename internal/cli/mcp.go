@@ -848,7 +848,13 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 				}
 				fromID := sanitizeMermaidID(e.FilePath)
 				fmt.Fprintf(&b, "    %s[\"%s\"]\n", fromID, shortenPath(e.FilePath, 30))
-				fmt.Fprintf(&b, "    %s -->|\"%.2f\"| %s\n", fromID, e.Score, primaryID)
+				edgeLabel := fmt.Sprintf("%.2f", e.Score)
+				if e.Relation != "" {
+					edgeLabel += fmt.Sprintf(" (%s)", e.Relation)
+				} else if e.RefKind != "" {
+					edgeLabel += fmt.Sprintf(" [%s]", e.RefKind)
+				}
+				fmt.Fprintf(&b, "    %s -->|\"%s\"| %s\n", fromID, edgeLabel, primaryID)
 			}
 
 			// Outbound edges (limit to top 15)
@@ -872,7 +878,13 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 				// Extract symbol name from node ID
 				symbolName := extractSymbolFromNodeID(e.To)
 				fmt.Fprintf(&b, "    %s[\"%s\"]\n", toID, symbolName)
-				fmt.Fprintf(&b, "    %s -->|\"%.2f\"| %s\n", primaryID, e.Score, toID)
+				edgeLabel := fmt.Sprintf("%.2f", e.Score)
+				if e.Relation != "" {
+					edgeLabel += fmt.Sprintf(" (%s)", e.Relation)
+				} else if e.RefKind != "" {
+					edgeLabel += fmt.Sprintf(" [%s]", e.RefKind)
+				}
+				fmt.Fprintf(&b, "    %s -->|\"%s\"| %s\n", primaryID, edgeLabel, toID)
 			}
 		}
 
@@ -892,6 +904,11 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 				u.Location.Path, u.Location.StartLine, u.DependencyScore)
 			if u.ContextContainer != "" {
 				fmt.Fprintf(&b, "   - Context: %s\n", u.ContextContainer)
+			}
+			if u.Relation != "" {
+				fmt.Fprintf(&b, "   - Relation: %s\n", u.Relation)
+			} else if u.Kind != "" && u.Kind != "other" {
+				fmt.Fprintf(&b, "   - Kind: %s\n", u.Kind)
 			}
 		}
 	}

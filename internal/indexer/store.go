@@ -138,11 +138,15 @@ func (s *Store) UpsertFile(path string, lang Lang, sha string, sizeBytes int64, 
 
 	// Insert symbols
 	for _, sym := range fr.Symbols {
+		isExt := 0
+		if sym.IsExternal {
+			isExt = 1
+		}
 		if _, err := tx.Exec(
-			`INSERT INTO symbols (file_id, name, kind, container_name, signature, start_line, start_col, end_line, end_col)
-			 VALUES (?,?,?,?,?,?,?,?,?)`,
+			`INSERT INTO symbols (file_id, name, kind, container_name, signature, start_line, start_col, end_line, end_col, is_external)
+			 VALUES (?,?,?,?,?,?,?,?,?,?)`,
 			fileID, sym.Name, int(sym.Kind), sym.ContainerName, sym.Signature,
-			sym.StartLine, sym.StartCol, sym.EndLine, sym.EndCol,
+			sym.StartLine, sym.StartCol, sym.EndLine, sym.EndCol, isExt,
 		); err != nil {
 			return fmt.Errorf("insert symbol %q: %w", sym.Name, err)
 		}
@@ -150,12 +154,21 @@ func (s *Store) UpsertFile(path string, lang Lang, sha string, sizeBytes int64, 
 
 	// Insert refs
 	for _, ref := range fr.Refs {
+		isExt := 0
+		if ref.IsExternal {
+			isExt = 1
+		}
+		isBuiltin := 0
+		if ref.IsBuiltin {
+			isBuiltin = 1
+		}
 		if _, err := tx.Exec(
-			`INSERT INTO refs (file_id, name, kind, start_line, start_col, end_line, end_col, context_container)
-			 VALUES (?,?,?,?,?,?,?,?)`,
+			`INSERT INTO refs (file_id, name, kind, start_line, start_col, end_line, end_col, context_container, is_external, is_builtin, relation, receiver_type, target_type)
+			 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			fileID, ref.Name, int(ref.Kind),
 			ref.StartLine, ref.StartCol, ref.EndLine, ref.EndCol,
-			ref.ContextContainer,
+			ref.ContextContainer, isExt, isBuiltin,
+			ref.Relation, ref.ReceiverType, ref.TargetType,
 		); err != nil {
 			return fmt.Errorf("insert ref %q: %w", ref.Name, err)
 		}

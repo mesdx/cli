@@ -125,6 +125,23 @@ var migrations = []migration{
 			CREATE INDEX IF NOT EXISTS idx_memory_symbols_memory ON memory_symbols(memory_id);
 		`,
 	},
+	{
+		Version: 3,
+		Name:    "add_external_builtin_and_relationship_metadata",
+		SQL: `
+			-- Add external flag to symbols
+			ALTER TABLE symbols ADD COLUMN is_external INTEGER NOT NULL DEFAULT 0;
+
+			-- Add external and builtin flags to refs
+			ALTER TABLE refs ADD COLUMN is_external INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE refs ADD COLUMN is_builtin INTEGER NOT NULL DEFAULT 0;
+
+			-- Add relationship metadata columns to refs
+			ALTER TABLE refs ADD COLUMN relation TEXT NOT NULL DEFAULT '';
+			ALTER TABLE refs ADD COLUMN receiver_type TEXT NOT NULL DEFAULT '';
+			ALTER TABLE refs ADD COLUMN target_type TEXT NOT NULL DEFAULT '';
+		`,
+	},
 }
 
 // Migrate runs all pending versioned migrations inside transactions.

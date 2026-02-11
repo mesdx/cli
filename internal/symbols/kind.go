@@ -89,10 +89,11 @@ type Symbol struct {
 	Kind          SymbolKind
 	ContainerName string
 	Signature     string
-	StartLine     int // 1-based
-	StartCol      int // 0-based
-	EndLine       int // 1-based
-	EndCol        int // 0-based
+	IsExternal    bool // true when the symbol originates from an external package/module
+	StartLine     int  // 1-based
+	StartCol      int  // 0-based
+	EndLine       int  // 1-based
+	EndCol        int  // 0-based
 }
 
 var refKindNames = map[RefKind]string{
@@ -118,6 +119,11 @@ func (k RefKind) String() string {
 type Ref struct {
 	Name             string
 	Kind             RefKind
+	IsExternal       bool   // true when the ref targets an external package/module
+	IsBuiltin        bool   // true when the ref targets a language builtin
+	Relation         string // semantic relationship: "inherits", "implements", "overrides", "prototype", etc.
+	ReceiverType     string // for method calls/field access, the receiver type if known
+	TargetType       string // for type refs/inheritance, the target type name
 	StartLine        int    // 1-based
 	StartCol         int    // 0-based
 	EndLine          int    // 1-based

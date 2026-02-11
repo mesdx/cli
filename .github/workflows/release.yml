@@ -78,10 +78,24 @@ jobs:
         run: |
           find . -type f -name "mesdx-*" ! -name "*.sha256" -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
 
+      - name: Check if prerelease
+        id: prerelease
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          if [[ "$TAG" =~ (rc|test) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Tag contains 'rc' or 'test' - marking as prerelease"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Stable release"
+          fi
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
           files: ./artifacts/**/*
+          draft: false
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

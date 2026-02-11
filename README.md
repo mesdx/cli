@@ -1,6 +1,9 @@
 <div align="center">
   <img src="icon.png" alt="MesDX" width="128" height="128">
   <h1>MesDX</h1>
+  
+  [![Test](https://github.com/mesdx/cli/actions/workflows/test.yml/badge.svg)](https://github.com/mesdx/cli/actions/workflows/test.yml)
+  [![Release](https://github.com/mesdx/cli/actions/workflows/release.yml/badge.svg)](https://github.com/mesdx/cli/actions/workflows/release.yml)
 </div>
 
 MesDX is a **local-first code intelligence MCP server** that indexes your repository and exposes reliable, structured navigation tools to agents like **Claude Code** (and other MCP clients). 🔍🧭

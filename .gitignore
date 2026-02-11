@@ -4,8 +4,6 @@
 *.exe
 *.exe~
 *.dll
-*.so
-*.dylib
 mesdx-*
 
 # Test binary, built with `go test -c`
