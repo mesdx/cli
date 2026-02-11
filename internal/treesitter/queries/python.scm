@@ -4,22 +4,37 @@
 (class_definition
   name: (identifier) @def.class)
 
-;; Function definitions
+;; Method definitions (functions inside class)
+(class_definition
+  body: (block
+    (function_definition
+      name: (identifier) @def.method)))
+
+;; Property decorators
+(class_definition
+  body: (block
+    (decorated_definition
+      (decorator
+        (identifier) @decorator.property (#eq? @decorator.property "property"))
+      definition: (function_definition
+        name: (identifier) @def.property))))
+
+;; Regular decorated methods
+(class_definition
+  body: (block
+    (decorated_definition
+      definition: (function_definition
+        name: (identifier) @def.method))))
+
+;; Top-level function definitions
 (function_definition
   name: (identifier) @def.function)
-
-;; Decorated functions (including @property)
-(decorated_definition
-  (decorator
-    (identifier) @decorator.name)
-  definition: (function_definition
-    name: (identifier) @def.method))
 
 ;; Parameters
 (parameters
   (identifier) @def.parameter)
 
-;; Assignment statements (variables)
+;; Assignment statements (variables and constants)
 (assignment
   left: (identifier) @def.var)
 

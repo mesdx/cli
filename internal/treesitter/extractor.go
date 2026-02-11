@@ -156,6 +156,11 @@ func (e *Extractor) Extract(filename string, source []byte) (*symbols.FileResult
 					continue
 				}
 
+				// Python-specific: Detect constants by naming convention (UPPER_CASE)
+				if e.langName == "python" && kind == symbols.KindVariable && isUpperCaseIdentifier(name) {
+					kind = symbols.KindConstant
+				}
+
 				// Get span
 				startPoint := node.StartPoint()
 				endPoint := node.EndPoint()
@@ -276,6 +281,8 @@ func mapCaptureToKind(capName string) symbols.SymbolKind {
 		return symbols.KindFunction
 	case "def.method":
 		return symbols.KindMethod
+	case "def.property":
+		return symbols.KindProperty
 	case "def.field":
 		return symbols.KindField
 	case "def.var":
@@ -313,7 +320,7 @@ func isCommonKeyword(s string) bool {
 		"if": true, "else": true, "for": true, "while": true, "do": true,
 		"switch": true, "case": true, "break": true, "continue": true,
 		"return": true, "try": true, "catch": true, "finally": true,
-		"throw": true, "new": true, "this": true, "super": true,
+		"throw": true, "this": true, "super": true,
 		"class": true, "extends": true, "implements": true, "import": true,
 		"export": true, "from": true, "default": true, "void": true,
 		"null": true, "undefined": true, "true": true, "false": true,
@@ -332,4 +339,26 @@ func isCommonKeyword(s string) bool {
 		"False": true, "package": true, "goto": true,
 	}
 	return keywords[s]
+}
+
+// isUpperCaseIdentifier checks if an identifier follows UPPER_CASE naming convention.
+// Used to detect Python constants (e.g., MAX_RETRIES).
+func isUpperCaseIdentifier(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	for _, ch := range s {
+		if ch >= 'a' && ch <= 'z' {
+			return false
+		}
+	}
+	// At least one uppercase letter or underscore
+	hasUpper := false
+	for _, ch := range s {
+		if ch >= 'A' && ch <= 'Z' {
+			hasUpper = true
+			break
+		}
+	}
+	return hasUpper
 }
