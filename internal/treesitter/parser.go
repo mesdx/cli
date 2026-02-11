@@ -18,7 +18,9 @@ func NewParser() *Parser {
 
 // SetLanguage sets the language for the parser.
 func (p *Parser) SetLanguage(lang *Language) error {
-	p.p.SetLanguage(lang.lang)
+	if err := p.p.SetLanguage(lang.lang); err != nil {
+		return err
+	}
 	return nil
 }
 

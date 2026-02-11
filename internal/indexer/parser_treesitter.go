@@ -36,23 +36,3 @@ func (p *TreeSitterParser) Parse(filename string, src []byte) (*symbols.FileResu
 
 	return p.extractor.Extract(filename, src)
 }
-
-// langNameForLang maps Lang constants to tree-sitter language names.
-func langNameForLang(lang Lang) string {
-	switch lang {
-	case LangGo:
-		return "go"
-	case LangJava:
-		return "java"
-	case LangRust:
-		return "rust"
-	case LangPython:
-		return "python"
-	case LangTypeScript:
-		return "typescript"
-	case LangJavaScript:
-		return "javascript"
-	default:
-		return ""
-	}
-}

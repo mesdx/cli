@@ -6,83 +6,78 @@ on:
       - 'v*'
 
 jobs:
-  build-and-release:
-    name: Build and Release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    
+  build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         include:
-          - os: darwin
-            arch: amd64
-          - os: darwin
-            arch: arm64
-          - os: linux
-            arch: amd64
-          - os: linux
-            arch: arm64
-    
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            artifact_name: mesdx-linux-amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+            artifact_name: mesdx-linux-arm64
+          - os: macos-14
+            goos: darwin
+            goarch: amd64
+            artifact_name: mesdx-darwin-amd64
+          - os: macos-14
+            goos: darwin
+            goarch: arm64
+            artifact_name: mesdx-darwin-arm64
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Setup Go
+
+      - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-      
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.os }}
-          GOARCH: ${{ matrix.arch }}
-          CGO_ENABLED: 1
+          go-version: '1.21'
+
+      - name: Get version from tag
+        id: get_version
         run: |
-          # Install cross-compilation tools for CGO
-          if [ "${{ matrix.os }}" = "darwin" ]; then
-            # For macOS builds on Linux, we need osxcross
-            # This is a simplified version - production would use osxcross
-            go build -o mesdx-${{ matrix.os }}-${{ matrix.arch }} ./cmd/mesdx
-          else
-            # Linux builds
-            if [ "${{ matrix.arch }}" = "arm64" ]; then
-              sudo apt-get update
-              sudo apt-get install -y gcc-aarch64-linux-gnu
-              export CC=aarch64-linux-gnu-gcc
-            fi
-            go build -o mesdx-${{ matrix.os }}-${{ matrix.arch }} ./cmd/mesdx
-          fi
-      
-      - name: Upload binary
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          go build -ldflags="-s -w -X github.com/mesdx/cli/internal/cli.version=$VERSION" -o ${{ matrix.artifact_name }} ./cmd/mesdx
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mesdx-${{ matrix.os }}-${{ matrix.arch }}
-          path: mesdx-${{ matrix.os }}-${{ matrix.arch }}
-  
-  create-release:
-    name: Create Release
-    needs: build-and-release
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_name }}
+          retention-days: 30
+
+  release:
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release-assets
-      
-      - name: Prepare release assets
+          path: ./artifacts
+
+      - name: Create checksums
+        working-directory: ./artifacts
         run: |
-          mkdir -p final-assets
-          find release-assets -type f -name 'mesdx-*' -exec cp {} final-assets/ \;
-          chmod +x final-assets/*
-          ls -lh final-assets/
-      
+          find . -type f -name "mesdx-*" ! -name "*.sha256" -exec sh -c 'sha256sum "$1" > "$1.sha256"' _ {} \;
+
       - name: Check if prerelease
         id: prerelease
         run: |
@@ -94,11 +89,11 @@ jobs:
             echo "is_prerelease=false" >> $GITHUB_OUTPUT
             echo "Stable release"
           fi
-      
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: final-assets/*
+          files: ./artifacts/**/*
           draft: false
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           generate_release_notes: true

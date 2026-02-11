@@ -1,8 +1,6 @@
 package treesitter
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/mesdx/cli/internal/symbols"
@@ -181,24 +179,5 @@ function sayHello(): void {
 	}
 	if !foundClass {
 		t.Error("Expected to find Person class")
-	}
-}
-
-// Helper to set up test parser directory
-func setupTestParserDir(t *testing.T) string {
-	testDir := t.TempDir()
-	os.Setenv("MESDX_PARSER_DIR", testDir)
-	t.Cleanup(func() {
-		os.Unsetenv("MESDX_PARSER_DIR")
-	})
-	return testDir
-}
-
-// Helper to create a mock parser lib (for testing discovery, not actual parsing)
-func createMockParserLib(t *testing.T, dir string, langName string) {
-	ext := ".so"
-	libName := filepath.Join(dir, "libtree-sitter-"+langName+ext)
-	if err := os.WriteFile(libName, []byte("mock"), 0644); err != nil {
-		t.Fatal(err)
 	}
 }
