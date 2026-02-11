@@ -166,6 +166,23 @@ This will:
 - **🔎 Index** the source directories you select (symbols + references)
 - **🧠 Create/index** a repo-relative markdown “memory” directory (default: `docs/mesdx-memory`)
 
+## Development
+
+For development setup and contribution guidelines, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**First-time setup** (before building):
+```bash
+# Initialize the grammar submodules (one-time)
+bash scripts/init-submodules.sh
+git add .gitmodules third_party/
+git commit -m "Initialize tree-sitter grammar submodules"
+```
+
+Then build normally:
+```bash
+make build
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and contribution guidelines.

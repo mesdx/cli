@@ -6,9 +6,7 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  %-20s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 .PHONY: setup
-setup: ## Initialize grammar submodules and tree-sitter headers
-	@echo "Setting up tree-sitter runtime headers..."
-	@bash scripts/setup-tree-sitter.sh
+setup: ## Initialize grammar submodules
 	@echo "Initializing grammar submodules..."
 	@bash scripts/setup-grammars.sh
 

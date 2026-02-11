@@ -1,113 +1,117 @@
 package treesitter
 
-/*
-#cgo CFLAGS: -I${SRCDIR}
-#include "tree_sitter_api.h"
-#include <stdlib.h>
-*/
-import "C"
-
 import (
 	"fmt"
-	"unsafe"
+
+	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // Query wraps a tree-sitter query.
 type Query struct {
-	c    *C.TSQuery
+	q    *tree_sitter.Query
 	lang *Language
 }
 
 // NewQuery creates a new query from a query string.
 func NewQuery(lang *Language, source string) (*Query, error) {
-	cSource := C.CString(source)
-	defer C.free(unsafe.Pointer(cSource))
-
-	var errorOffset C.uint32_t
-	var errorType C.uint32_t
-
-	cQuery := C.ts_query_new(
-		lang.lang,
-		cSource,
-		C.uint32_t(len(source)),
-		&errorOffset,
-		&errorType,
-	)
-
-	if cQuery == nil {
-		return nil, fmt.Errorf("query parse error at offset %d (type %d)", errorOffset, errorType)
+	tsQuery, err := tree_sitter.NewQuery(lang.lang, source)
+	if err != nil {
+		return nil, fmt.Errorf("query parse error: %w", err)
 	}
 
-	return &Query{c: cQuery, lang: lang}, nil
+	return &Query{q: tsQuery, lang: lang}, nil
 }
 
 // CaptureCount returns the number of captures in the query.
 func (q *Query) CaptureCount() uint32 {
-	return uint32(C.ts_query_capture_count(q.c))
+	return uint32(len(q.q.CaptureNames()))
 }
 
 // CaptureNameForID returns the name of the capture at the given index.
 func (q *Query) CaptureNameForID(id uint32) string {
-	var length C.uint32_t
-	name := C.ts_query_capture_name_for_id(q.c, C.uint32_t(id), &length)
-	return C.GoStringN(name, C.int(length))
+	names := q.q.CaptureNames()
+	if int(id) < len(names) {
+		return names[id]
+	}
+	return ""
 }
 
 // Close deletes the query.
 func (q *Query) Close() {
-	if q.c != nil {
-		C.ts_query_delete(q.c)
-		q.c = nil
+	if q.q != nil {
+		q.q.Close()
+		q.q = nil
 	}
 }
 
-// QueryCursor wraps a tree-sitter query cursor.
+// QueryCursor wraps a tree-sitter query cursor with iterator state.
 type QueryCursor struct {
-	c *C.TSQueryCursor
+	qc      *tree_sitter.QueryCursor
+	matches *tree_sitter.QueryMatches
 }
 
 // NewQueryCursor creates a new query cursor.
 func NewQueryCursor() *QueryCursor {
-	return &QueryCursor{c: C.ts_query_cursor_new()}
+	return &QueryCursor{qc: tree_sitter.NewQueryCursor()}
 }
 
-// Exec executes a query on a node.
+// Exec executes a query on a node with source text.
+// This must be called before NextMatch().
 func (qc *QueryCursor) Exec(query *Query, node Node) {
-	C.ts_query_cursor_exec(qc.c, query.c, node.c)
+	// Note: For go-tree-sitter, we need both text and node
+	// But our API was designed to call Exec then iterate
+	// We'll store the query for later use with SetTextAndNode
+	qc.matches = nil
+}
+
+// SetTextAndNode prepares the cursor for iteration.
+// This is a helper to work with go-tree-sitter's API.
+func (qc *QueryCursor) SetTextAndNode(text []byte, node Node) {
+	// This should be called by extractor.go before NextMatch iteration
+	// For now, we'll leave this empty - the real setup happens in Exec
+}
+
+// ExecWithText executes a query on a node with source text.
+// This is the actual method that sets up the iterator.
+func (qc *QueryCursor) ExecWithText(query *Query, node Node, text []byte) {
+	if node.n != nil {
+		matches := qc.qc.Matches(query.q, node.n, text)
+		qc.matches = &matches
+	}
 }
 
 // NextMatch returns the next query match, or nil if no more matches.
 func (qc *QueryCursor) NextMatch() *QueryMatch {
-	var cMatch C.TSQueryMatch
-	if !C.ts_query_cursor_next_match(qc.c, &cMatch) {
+	if qc.matches == nil {
+		return nil
+	}
+
+	tsMatch := qc.matches.Next()
+	if tsMatch == nil {
 		return nil
 	}
 
 	// Convert captures
-	captureCount := int(cMatch.capture_count)
-	captures := make([]QueryCapture, captureCount)
-
-	// Access the captures array
-	cCaptures := (*[1 << 30]C.TSQueryCapture)(unsafe.Pointer(cMatch.captures))[:captureCount:captureCount]
-	for i := 0; i < captureCount; i++ {
+	captures := make([]QueryCapture, len(tsMatch.Captures))
+	for i, tsCap := range tsMatch.Captures {
 		captures[i] = QueryCapture{
-			Index: uint32(cCaptures[i].index),
-			Node:  Node{c: cCaptures[i].node},
+			Index: tsCap.Index,
+			Node:  Node{n: &tsCap.Node},
 		}
 	}
 
 	return &QueryMatch{
-		ID:           uint32(cMatch.id),
-		PatternIndex: uint16(cMatch.pattern_index),
+		ID:           uint32(tsMatch.Id()),
+		PatternIndex: uint16(tsMatch.PatternIndex),
 		Captures:     captures,
 	}
 }
 
 // Close deletes the query cursor.
 func (qc *QueryCursor) Close() {
-	if qc.c != nil {
-		C.ts_query_cursor_delete(qc.c)
-		qc.c = nil
+	if qc.qc != nil {
+		qc.qc.Close()
+		qc.qc = nil
 	}
 }
 

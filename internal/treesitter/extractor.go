@@ -93,7 +93,7 @@ func (e *Extractor) Extract(filename string, source []byte) (*symbols.FileResult
 	defer cursor.Close()
 
 	rootNode := tree.RootNode()
-	cursor.Exec(e.query, rootNode)
+	cursor.ExecWithText(e.query, rootNode, source)
 
 	result := &symbols.FileResult{
 		Symbols: []symbols.Symbol{},

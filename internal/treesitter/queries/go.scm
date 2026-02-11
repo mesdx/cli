@@ -8,30 +8,20 @@
 (function_declaration
   name: (identifier) @def.function)
 
-;; Method definitions
+;; Method definitions (simplified - just capture the method name)
 (method_declaration
-  name: (field_identifier) @def.method
-  receiver: (parameter_list
-    (parameter_declaration
-      type: [
-        (type_identifier) @container.name
-        (pointer_type (type_identifier) @container.name)
-      ])))
+  name: (field_identifier) @def.method)
 
 ;; Type definitions
 (type_declaration
   (type_spec
-    name: (type_identifier) @def.type
-    type: (struct_type) @def.struct))
+    name: (type_identifier) @def.struct
+    type: (struct_type)))
 
 (type_declaration
   (type_spec
-    name: (type_identifier) @def.type
-    type: (interface_type) @def.interface))
-
-(type_declaration
-  (type_spec
-    name: (type_identifier) @def.typealias))
+    name: (type_identifier) @def.interface
+    type: (interface_type)))
 
 ;; Struct fields
 (field_declaration

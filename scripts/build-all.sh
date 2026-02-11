@@ -11,25 +11,20 @@ cd "${PROJECT_ROOT}"
 echo "🔨 Building MesDX with embedded parsers..."
 echo ""
 
-# 1. Setup tree-sitter headers
-echo "📦 Setting up tree-sitter headers..."
-bash scripts/setup-tree-sitter.sh
-echo ""
-
-# 2. Initialize grammar submodules
+# 1. Initialize grammar submodules
 echo "📦 Initializing grammar submodules..."
 bash scripts/setup-grammars.sh
 echo ""
 
-# 3. Build parser libraries
+# 2. Build parser libraries
 echo "🔧 Building parser libraries..."
 bash scripts/build-parsers.sh
 echo ""
 
-# 4. Set parser directory for build
+# 3. Set parser directory for build
 export MESDX_PARSER_DIR="${PROJECT_ROOT}/dist/parsers"
 
-# 5. Build Go binary
+# 4. Build Go binary
 echo "🔧 Building Go binary..."
 go build -o dist/mesdx ./cmd/mesdx
 echo ""

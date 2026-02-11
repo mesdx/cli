@@ -11,7 +11,21 @@ Thank you for your interest in contributing to MesDX CLI! This document provides
 - C compiler (gcc/clang) for building tree-sitter parsers
 - Make (optional, for convenience)
 
+### First-Time Setup
+
+If the grammar submodules haven't been initialized yet in the repository:
+
+```bash
+# Initialize and commit submodules (one-time)
+bash scripts/init-submodules.sh
+git add .gitmodules third_party/
+git commit -m "Initialize tree-sitter grammar submodules"
+git push
+```
+
 ### Quick Start
+
+Once submodules are committed:
 
 ```bash
 # One command to build everything
@@ -26,7 +40,7 @@ make install
 
 That's it! The `make build` command will:
 1. Download tree-sitter headers
-2. Initialize grammar submodules
+2. Initialize grammar submodules (from .gitmodules)
 3. Build parser libraries
 4. Build the Go binary
 

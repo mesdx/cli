@@ -46,11 +46,18 @@ func (p *Person) Greet() string {
 	// Check we got symbols
 	if len(result.Symbols) == 0 {
 		t.Error("Expected symbols, got none")
+	} else {
+		t.Logf("Found %d symbols:", len(result.Symbols))
+		for i, sym := range result.Symbols {
+			t.Logf("  %d. %s (%s)", i+1, sym.Name, sym.Kind)
+		}
 	}
 
 	// Check we got refs
 	if len(result.Refs) == 0 {
 		t.Error("Expected refs, got none")
+	} else {
+		t.Logf("Found %d refs", len(result.Refs))
 	}
 
 	// Check for specific symbols

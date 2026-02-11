@@ -1,173 +1,198 @@
 package treesitter
 
-/*
-#cgo CFLAGS: -I${SRCDIR}
-#include "tree_sitter_api.h"
-#include <stdlib.h>
-*/
-import "C"
-
 import (
-	"fmt"
-	"unsafe"
+	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
 // Parser wraps a tree-sitter parser.
 type Parser struct {
-	c *C.TSParser
+	p *tree_sitter.Parser
 }
 
 // NewParser creates a new tree-sitter parser.
 func NewParser() *Parser {
 	return &Parser{
-		c: C.ts_parser_new(),
+		p: tree_sitter.NewParser(),
 	}
 }
 
 // SetLanguage sets the language for the parser.
 func (p *Parser) SetLanguage(lang *Language) error {
-	if !C.ts_parser_set_language(p.c, lang.lang) {
-		return fmt.Errorf("failed to set language: version mismatch or invalid language")
-	}
+	p.p.SetLanguage(lang.lang)
 	return nil
 }
 
 // ParseString parses a source string and returns a tree.
 func (p *Parser) ParseString(oldTree *Tree, source []byte) *Tree {
-	var cOldTree *C.TSTree
+	var tsOldTree *tree_sitter.Tree
 	if oldTree != nil {
-		cOldTree = oldTree.c
+		tsOldTree = oldTree.t
 	}
 
-	cSource := (*C.char)(unsafe.Pointer(&source[0]))
-	cLength := C.uint32_t(len(source))
-
-	cTree := C.ts_parser_parse_string(p.c, cOldTree, cSource, cLength)
-	if cTree == nil {
+	tsTree := p.p.Parse(source, tsOldTree)
+	if tsTree == nil {
 		return nil
 	}
 
-	return &Tree{c: cTree}
+	return &Tree{t: tsTree}
 }
 
 // Close deletes the parser.
 func (p *Parser) Close() {
-	if p.c != nil {
-		C.ts_parser_delete(p.c)
-		p.c = nil
+	if p.p != nil {
+		p.p.Close()
+		p.p = nil
 	}
 }
 
 // Tree wraps a tree-sitter tree.
 type Tree struct {
-	c *C.TSTree
+	t *tree_sitter.Tree
 }
 
 // RootNode returns the root node of the tree.
 func (t *Tree) RootNode() Node {
-	return Node{c: C.ts_tree_root_node(t.c)}
+	return Node{n: t.t.RootNode()}
 }
 
 // Close deletes the tree.
 func (t *Tree) Close() {
-	if t.c != nil {
-		C.ts_tree_delete(t.c)
-		t.c = nil
+	if t.t != nil {
+		t.t.Close()
+		t.t = nil
 	}
 }
 
 // Node wraps a tree-sitter node.
 type Node struct {
-	c C.TSNode
+	n *tree_sitter.Node
 }
 
 // IsNull returns true if the node is null.
 func (n Node) IsNull() bool {
-	return bool(C.ts_node_is_null(n.c))
+	return n.n == nil
 }
 
 // Type returns the node's type string.
 func (n Node) Type() string {
-	return C.GoString(C.ts_node_type(n.c))
+	if n.n == nil {
+		return ""
+	}
+	return n.n.Kind()
 }
 
 // IsNamed returns true if the node is named.
 func (n Node) IsNamed() bool {
-	return bool(C.ts_node_is_named(n.c))
+	if n.n == nil {
+		return false
+	}
+	return n.n.IsNamed()
 }
 
 // StartByte returns the start byte offset.
 func (n Node) StartByte() uint32 {
-	return uint32(C.ts_node_start_byte(n.c))
+	if n.n == nil {
+		return 0
+	}
+	return uint32(n.n.StartByte())
 }
 
 // EndByte returns the end byte offset.
 func (n Node) EndByte() uint32 {
-	return uint32(C.ts_node_end_byte(n.c))
+	if n.n == nil {
+		return 0
+	}
+	return uint32(n.n.EndByte())
 }
 
 // StartPoint returns the start point (row, column).
 func (n Node) StartPoint() Point {
-	p := C.ts_node_start_point(n.c)
-	return Point{Row: uint32(p.row), Column: uint32(p.column)}
+	if n.n == nil {
+		return Point{}
+	}
+	p := n.n.StartPosition()
+	return Point{Row: uint32(p.Row), Column: uint32(p.Column)}
 }
 
 // EndPoint returns the end point (row, column).
 func (n Node) EndPoint() Point {
-	p := C.ts_node_end_point(n.c)
-	return Point{Row: uint32(p.row), Column: uint32(p.column)}
+	if n.n == nil {
+		return Point{}
+	}
+	p := n.n.EndPosition()
+	return Point{Row: uint32(p.Row), Column: uint32(p.Column)}
 }
 
 // ChildCount returns the number of children.
 func (n Node) ChildCount() uint32 {
-	return uint32(C.ts_node_child_count(n.c))
+	if n.n == nil {
+		return 0
+	}
+	return uint32(n.n.ChildCount())
 }
 
 // Child returns the child at the given index.
 func (n Node) Child(index uint32) Node {
-	return Node{c: C.ts_node_child(n.c, C.uint32_t(index))}
+	if n.n == nil {
+		return Node{}
+	}
+	return Node{n: n.n.Child(uint(index))}
 }
 
 // NamedChildCount returns the number of named children.
 func (n Node) NamedChildCount() uint32 {
-	return uint32(C.ts_node_named_child_count(n.c))
+	if n.n == nil {
+		return 0
+	}
+	return uint32(n.n.NamedChildCount())
 }
 
 // NamedChild returns the named child at the given index.
 func (n Node) NamedChild(index uint32) Node {
-	return Node{c: C.ts_node_named_child(n.c, C.uint32_t(index))}
+	if n.n == nil {
+		return Node{}
+	}
+	return Node{n: n.n.NamedChild(uint(index))}
 }
 
 // ChildByFieldName returns the child with the given field name.
 func (n Node) ChildByFieldName(fieldName string) Node {
-	cFieldName := C.CString(fieldName)
-	defer C.free(unsafe.Pointer(cFieldName))
-	return Node{c: C.ts_node_child_by_field_name(n.c, cFieldName, C.uint32_t(len(fieldName)))}
+	if n.n == nil {
+		return Node{}
+	}
+	return Node{n: n.n.ChildByFieldName(fieldName)}
 }
 
 // NextSibling returns the next sibling node.
 func (n Node) NextSibling() Node {
-	return Node{c: C.ts_node_next_sibling(n.c)}
+	if n.n == nil {
+		return Node{}
+	}
+	return Node{n: n.n.NextSibling()}
 }
 
 // NextNamedSibling returns the next named sibling node.
 func (n Node) NextNamedSibling() Node {
-	return Node{c: C.ts_node_next_named_sibling(n.c)}
+	if n.n == nil {
+		return Node{}
+	}
+	return Node{n: n.n.NextNamedSibling()}
 }
 
 // Parent returns the parent node.
 func (n Node) Parent() Node {
-	return Node{c: C.ts_node_parent(n.c)}
+	if n.n == nil {
+		return Node{}
+	}
+	return Node{n: n.n.Parent()}
 }
 
 // Content extracts the node's text content from the source.
 func (n Node) Content(source []byte) string {
-	start := n.StartByte()
-	end := n.EndByte()
-	if start >= uint32(len(source)) || end > uint32(len(source)) {
+	if n.n == nil {
 		return ""
 	}
-	return string(source[start:end])
+	return n.n.Utf8Text(source)
 }
 
 // Point represents a position in the source.
