@@ -2,22 +2,22 @@ package treesitter
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"sync"
 	"unsafe"
 
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
-	"github.com/ebitengine/purego"
+	tree_sitter_go "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	tree_sitter_java "github.com/tree-sitter/tree-sitter-java/bindings/go"
+	tree_sitter_javascript "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
+	tree_sitter_python "github.com/tree-sitter/tree-sitter-python/bindings/go"
+	tree_sitter_rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
+	tree_sitter_typescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 )
 
-// Language wraps a tree-sitter language with its dynamic library handle.
+// Language wraps a tree-sitter language.
 type Language struct {
-	handle uintptr // purego library handle
-	lang   *tree_sitter.Language
-	name   string
+	lang *tree_sitter.Language
+	name string
 }
 
 var (
@@ -25,42 +25,18 @@ var (
 	cacheMu       sync.RWMutex
 )
 
-// ParserDir returns the directory containing parser dynamic libraries.
-// It checks in order:
-// 1. MESDX_PARSER_DIR environment variable
-// 2. exeDir/../lib/mesdx/parsers (installed alongside binary)
-// 3. Returns error if none found
-func ParserDir() (string, error) {
-	// Check env var first
-	if dir := os.Getenv("MESDX_PARSER_DIR"); dir != "" {
-		if _, err := os.Stat(dir); err == nil {
-			return dir, nil
-		}
-		return "", fmt.Errorf("MESDX_PARSER_DIR is set to %q but directory does not exist", dir)
-	}
-
-	// Try relative to executable
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("failed to get executable path: %w", err)
-	}
-	exe, err = filepath.EvalSymlinks(exe)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve executable symlinks: %w", err)
-	}
-
-	exeDir := filepath.Dir(exe)
-	parserDir := filepath.Join(exeDir, "..", "lib", "mesdx", "parsers")
-	parserDir, _ = filepath.Abs(parserDir)
-
-	if _, err := os.Stat(parserDir); err == nil {
-		return parserDir, nil
-	}
-
-	return "", fmt.Errorf("parser libraries not found; tried MESDX_PARSER_DIR and %s", parserDir)
+// languageMap contains all statically compiled language parsers.
+var languageMap = map[string]func() unsafe.Pointer{
+	"go":         tree_sitter_go.Language,
+	"java":       tree_sitter_java.Language,
+	"rust":       tree_sitter_rust.Language,
+	"python":     tree_sitter_python.Language,
+	"javascript": tree_sitter_javascript.Language,
+	"typescript": tree_sitter_typescript.LanguageTypescript,
+	"tsx":        tree_sitter_typescript.LanguageTSX,
 }
 
-// LoadLanguage loads a tree-sitter language library by name.
+// LoadLanguage loads a tree-sitter language by name.
 // The name should be the language identifier (e.g., "go", "python", "typescript").
 func LoadLanguage(langName string) (*Language, error) {
 	cacheMu.RLock()
@@ -70,49 +46,24 @@ func LoadLanguage(langName string) (*Language, error) {
 	}
 	cacheMu.RUnlock()
 
-	parserDir, err := ParserDir()
-	if err != nil {
-		return nil, err
+	// Get the language function from the static map
+	langFunc, ok := languageMap[langName]
+	if !ok {
+		return nil, fmt.Errorf("unsupported language: %s", langName)
 	}
 
-	// Determine library extension
-	ext := ".so"
-	if runtime.GOOS == "darwin" {
-		ext = ".dylib"
-	}
-
-	libName := fmt.Sprintf("libtree-sitter-%s%s", langName, ext)
-	libPath := filepath.Join(parserDir, libName)
-
-	// Check if library exists
-	if _, err := os.Stat(libPath); err != nil {
-		return nil, fmt.Errorf("parser library not found: %s", libPath)
-	}
-
-	// Load the library using purego
-	handle, err := purego.Dlopen(libPath, purego.RTLD_NOW|purego.RTLD_GLOBAL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load %s: %w", libPath, err)
-	}
-
-	// Get the language function
-	var languageFunc func() unsafe.Pointer
-	symbolName := fmt.Sprintf("tree_sitter_%s", langName)
-	purego.RegisterLibFunc(&languageFunc, handle, symbolName)
-
-	// Call the language function
-	langPtr := languageFunc()
+	// Call the language function to get the pointer
+	langPtr := langFunc()
 	if langPtr == nil {
-		return nil, fmt.Errorf("failed to get language pointer from %s", libPath)
+		return nil, fmt.Errorf("failed to get language pointer for %s", langName)
 	}
 
 	// Create tree-sitter language wrapper
 	tsLang := tree_sitter.NewLanguage(langPtr)
 
 	lang := &Language{
-		handle: handle,
-		lang:   tsLang,
-		name:   langName,
+		lang: tsLang,
+		name: langName,
 	}
 
 	cacheMu.Lock()
@@ -132,49 +83,32 @@ func (l *Language) Name() string {
 	return l.name
 }
 
-// Close closes the language library handle.
+// Close is a no-op for statically linked languages.
+// Kept for API compatibility.
 func (l *Language) Close() error {
-	// Note: purego doesn't expose dlclose, and Go's GC will handle cleanup
-	// We keep this method for API compatibility
 	return nil
 }
 
-// CloseAll closes all loaded language libraries.
+// CloseAll clears the language cache.
+// Kept for API compatibility.
 func CloseAll() {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-
-	for _, lang := range languageCache {
-		_ = lang.Close()
-	}
 	languageCache = make(map[string]*Language)
 }
 
-// VerifyLanguages checks that all required language libraries are available.
-// Returns a list of missing libraries or an error describing the issue.
+// VerifyLanguages checks that all required languages are available.
+// With static linking, this just checks against the language map.
 func VerifyLanguages(requiredLangs []string) error {
-	parserDir, err := ParserDir()
-	if err != nil {
-		return err
-	}
-
 	var missing []string
 	for _, langName := range requiredLangs {
-		ext := ".so"
-		if runtime.GOOS == "darwin" {
-			ext = ".dylib"
-		}
-		libName := fmt.Sprintf("libtree-sitter-%s%s", langName, ext)
-		libPath := filepath.Join(parserDir, libName)
-
-		if _, err := os.Stat(libPath); err != nil {
+		if _, ok := languageMap[langName]; !ok {
 			missing = append(missing, langName)
 		}
 	}
 
 	if len(missing) > 0 {
-		return fmt.Errorf("missing parser libraries for languages: %s\n\nParser directory: %s\n\nPlease install the parser libraries. See README.md for installation instructions.",
-			strings.Join(missing, ", "), parserDir)
+		return fmt.Errorf("unsupported languages: %v", missing)
 	}
 
 	return nil

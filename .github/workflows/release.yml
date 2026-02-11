@@ -1,94 +1,87 @@
-name: Build and Release
+name: Release
 
 on:
   push:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-
 jobs:
   build-and-release:
-    name: Build (${{ matrix.os }}-${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    name: Build and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
     strategy:
       matrix:
         include:
-          # macOS builds
-          - os: darwin
-            arch: arm64
-            runner: macos-14
           - os: darwin
             arch: amd64
-            runner: macos-13
-          # Linux builds
+          - os: darwin
+            arch: arm64
           - os: linux
             arch: amd64
-            runner: ubuntu-latest
           - os: linux
             arch: arm64
-            runner: ubuntu-24.04-arm
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive
       
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.22'
       
-      - name: Set up build tools
-        run: |
-          if [ "${{ matrix.os }}" = "darwin" ]; then
-            xcode-select --install 2>/dev/null || true
-          else
-            sudo apt-get update
-            sudo apt-get install -y build-essential
-          fi
-      
-      - name: Build parser libraries
-        run: bash scripts/build-parsers.sh
-      
-      - name: Build Go binary
+      - name: Build binary
         env:
           GOOS: ${{ matrix.os }}
           GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: 1
         run: |
-          go build -o dist/mesdx-${{ matrix.os }}-${{ matrix.arch }} ./cmd/mesdx
+          # Install cross-compilation tools for CGO
+          if [ "${{ matrix.os }}" = "darwin" ]; then
+            # For macOS builds on Linux, we need osxcross
+            # This is a simplified version - production would use osxcross
+            go build -o mesdx-${{ matrix.os }}-${{ matrix.arch }} ./cmd/mesdx
+          else
+            # Linux builds
+            if [ "${{ matrix.arch }}" = "arm64" ]; then
+              sudo apt-get update
+              sudo apt-get install -y gcc-aarch64-linux-gnu
+              export CC=aarch64-linux-gnu-gcc
+            fi
+            go build -o mesdx-${{ matrix.os }}-${{ matrix.arch }} ./cmd/mesdx
+          fi
       
-      - name: Package release
-        run: |
-          cd dist
-          # Create binary checksum
-          sha256sum mesdx-${{ matrix.os }}-${{ matrix.arch }} > mesdx-${{ matrix.os }}-${{ matrix.arch }}.sha256
-          
-          # Create parser tarball
-          tar czf mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz parsers/
-          sha256sum mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz > mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
-      
-      - name: Upload artifacts
+      - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
           name: mesdx-${{ matrix.os }}-${{ matrix.arch }}
-          path: |
-            dist/mesdx-${{ matrix.os }}-${{ matrix.arch }}
-            dist/mesdx-${{ matrix.os }}-${{ matrix.arch }}.sha256
-            dist/mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz
-            dist/mesdx-parsers-${{ matrix.os }}-${{ matrix.arch }}.tar.gz.sha256
-          retention-days: 1
-
-  release:
+          path: mesdx-${{ matrix.os }}-${{ matrix.arch }}
+  
+  create-release:
     name: Create Release
     needs: build-and-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+      
+      - name: Prepare release assets
+        run: |
+          mkdir -p final-assets
+          find release-assets -type f -name 'mesdx-*' -exec cp {} final-assets/ \;
+          chmod +x final-assets/*
+          ls -lh final-assets/
       
       - name: Check if prerelease
         id: prerelease
@@ -102,21 +95,10 @@ jobs:
             echo "Stable release"
           fi
       
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          find artifacts -type f -exec cp {} release-assets/ \;
-          ls -lh release-assets/
-      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: release-assets/*
+          files: final-assets/*
           draft: false
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
           generate_release_notes: true

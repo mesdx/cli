@@ -6,10 +6,6 @@
 *.dll
 mesdx-*
 
-# Parser libraries (built, not checked in)
-dist/parsers/*.so
-dist/parsers/*.dylib
-
 # Test binary, built with `go test -c`
 *.test
 

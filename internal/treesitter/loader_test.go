@@ -1,64 +1,42 @@
 package treesitter
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 )
 
-func TestParserDir(t *testing.T) {
-	// Test with env var set
-	testDir := t.TempDir()
-	os.Setenv("MESDX_PARSER_DIR", testDir)
-	defer os.Unsetenv("MESDX_PARSER_DIR")
-
-	dir, err := ParserDir()
+func TestLoadLanguage(t *testing.T) {
+	// Test loading a supported language
+	lang, err := LoadLanguage("go")
 	if err != nil {
-		t.Fatalf("ParserDir() with env var: %v", err)
+		t.Fatalf("LoadLanguage(go): %v", err)
 	}
-	if dir != testDir {
-		t.Errorf("ParserDir() = %q, want %q", dir, testDir)
+	if lang == nil {
+		t.Fatal("LoadLanguage(go) returned nil language")
+	}
+	if lang.Name() != "go" {
+		t.Errorf("Language.Name() = %q, want %q", lang.Name(), "go")
 	}
 }
 
-func TestParserDirNotFound(t *testing.T) {
-	os.Unsetenv("MESDX_PARSER_DIR")
-	
-	// This will fail unless parsers are actually installed
-	_, err := ParserDir()
+func TestLoadLanguageUnsupported(t *testing.T) {
+	// Test loading an unsupported language
+	_, err := LoadLanguage("cobol")
 	if err == nil {
-		// If it succeeds, parsers are installed, which is fine for the test
-		return
-	}
-	
-	// Expected error when parsers aren't found
-	if err.Error() == "" {
-		t.Error("ParserDir() should return descriptive error when not found")
+		t.Error("LoadLanguage(cobol) should fail for unsupported language")
 	}
 }
 
 func TestVerifyLanguages(t *testing.T) {
-	// Create a temp directory with mock parser libs
-	testDir := t.TempDir()
-	os.Setenv("MESDX_PARSER_DIR", testDir)
-	defer os.Unsetenv("MESDX_PARSER_DIR")
-
-	// Create a mock parser file
-	mockFile := filepath.Join(testDir, "libtree-sitter-go.so")
-	if err := os.WriteFile(mockFile, []byte("mock"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Should fail for missing languages
-	err := VerifyLanguages([]string{"go", "python"})
-	if err == nil {
-		t.Error("VerifyLanguages() should fail when libraries are missing")
-	}
-
-	// Should succeed when all requested libs exist
-	err = VerifyLanguages([]string{"go"})
+	// Should succeed for supported languages
+	err := VerifyLanguages([]string{"go", "python", "typescript"})
 	if err != nil {
-		t.Errorf("VerifyLanguages() with existing lib: %v", err)
+		t.Errorf("VerifyLanguages(supported): %v", err)
+	}
+
+	// Should fail for unsupported languages
+	err = VerifyLanguages([]string{"go", "cobol"})
+	if err == nil {
+		t.Error("VerifyLanguages() should fail when languages are unsupported")
 	}
 }
 
@@ -80,5 +58,36 @@ func TestRequiredLanguages(t *testing.T) {
 		if !langMap[exp] {
 			t.Errorf("RequiredLanguages() missing %q", exp)
 		}
+	}
+}
+
+func TestLanguageCache(t *testing.T) {
+	// Load a language
+	lang1, err := LoadLanguage("rust")
+	if err != nil {
+		t.Fatalf("LoadLanguage(rust): %v", err)
+	}
+
+	// Load again - should return cached instance
+	lang2, err := LoadLanguage("rust")
+	if err != nil {
+		t.Fatalf("LoadLanguage(rust) second time: %v", err)
+	}
+
+	// Should be the same instance (pointer equality)
+	if lang1 != lang2 {
+		t.Error("LoadLanguage should return cached language instance")
+	}
+
+	// Clear cache
+	CloseAll()
+
+	// Load again - should be a new instance
+	lang3, err := LoadLanguage("rust")
+	if err != nil {
+		t.Fatalf("LoadLanguage(rust) after CloseAll: %v", err)
+	}
+	if lang3 == lang1 {
+		t.Error("LoadLanguage after CloseAll should return new instance")
 	}
 }

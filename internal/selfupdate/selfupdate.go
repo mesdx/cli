@@ -1,8 +1,6 @@
 package selfupdate
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -111,16 +109,6 @@ func CheckAndUpdate(currentVersion string) error {
 	}
 
 	fmt.Printf("✓ Updated mesdx from %s to %s\n", currentVersion, release.TagName)
-
-	// Also update parser libraries
-	if err := updateParserLibraries(release, exePath); err != nil {
-		// Non-fatal - user can install parsers manually
-		fmt.Printf("⚠ Failed to update parser libraries: %v\n", err)
-		fmt.Println("  Please install parsers manually. See README.md for instructions.")
-	} else {
-		fmt.Println("✓ Updated parser libraries")
-	}
-
 	fmt.Println("  Please re-run your command to use the new version.")
 
 	return nil
@@ -219,115 +207,6 @@ func downloadAndReplace(url, targetPath string) error {
 	return nil
 }
 
-func updateParserLibraries(release *Release, exePath string) error {
-	// Determine parser asset name
-	parserAssetName := parserAssetNameForPlatform()
-	parserAsset := findAsset(release.Assets, parserAssetName)
-	if parserAsset == nil {
-		return fmt.Errorf("no parser asset found for this platform (%s)", parserAssetName)
-	}
-
-	// Determine parser directory
-	exeDir := filepath.Dir(exePath)
-	parserDir := filepath.Join(exeDir, "..", "lib", "mesdx", "parsers")
-	parserDir, _ = filepath.Abs(parserDir)
-
-	// Create parser directory
-	if err := os.MkdirAll(parserDir, 0755); err != nil {
-		return fmt.Errorf("failed to create parser directory: %w", err)
-	}
-
-	// Download parser tarball to temp file
-	tmpFile, err := os.CreateTemp("", "mesdx-parsers-*.tar.gz")
-	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-
-	client := &http.Client{Timeout: 60 * time.Second}
-	resp, err := client.Get(parserAsset.BrowserDownloadURL)
-	if err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to download: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		_ = tmpFile.Close()
-		return fmt.Errorf("download failed with status %d", resp.StatusCode)
-	}
-
-	if _, err := io.Copy(tmpFile, resp.Body); err != nil {
-		_ = tmpFile.Close()
-		return fmt.Errorf("failed to write tarball: %w", err)
-	}
-	_ = tmpFile.Close()
-
-	// Extract tarball to parser directory
-	if err := extractTarball(tmpPath, parserDir); err != nil {
-		return fmt.Errorf("failed to extract parsers: %w", err)
-	}
-
-	return nil
-}
-
-func parserAssetNameForPlatform() string {
-	return fmt.Sprintf("mesdx-parsers-%s-%s.tar.gz", runtime.GOOS, runtime.GOARCH)
-}
-
-func extractTarball(tarPath, destDir string) error {
-	// Open the tarball
-	f, err := os.Open(tarPath)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	// Create gzip reader
-	gzr, err := gzip.NewReader(f)
-	if err != nil {
-		return err
-	}
-	defer gzr.Close()
-
-	// Create tar reader
-	tr := tar.NewReader(gzr)
-
-	// Extract each file
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		// Construct target path (strip leading "parsers/" from archive)
-		targetPath := filepath.Join(destDir, filepath.Base(header.Name))
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			// Skip directories, we create parent dirs as needed
-			continue
-		case tar.TypeReg:
-			// Extract file
-			outFile, err := os.OpenFile(targetPath, os.O_CREATE|os.O_RDWR|os.O_TRUNC, os.FileMode(header.Mode))
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
-				return err
-			}
-			outFile.Close()
-		}
-	}
-
-	return nil
-}
-
 func printManualUpdateInstructions(currentVersion, newVersion, assetName, downloadURL string) {
 	fmt.Printf("\n")
 	fmt.Printf("╭─────────────────────────────────────────────────────────────────╮\n")
@@ -337,7 +216,6 @@ func printManualUpdateInstructions(currentVersion, newVersion, assetName, downlo
 	fmt.Printf("The mesdx binary is installed in a location that requires\n")
 	fmt.Printf("elevated permissions to update. To update manually, run:\n")
 	fmt.Printf("\n")
-	fmt.Printf("  # Update binary\n")
 	fmt.Printf("  curl -L %s -o /tmp/mesdx\n", downloadURL)
 	fmt.Printf("  chmod +x /tmp/mesdx\n")
 
@@ -346,28 +224,8 @@ func printManualUpdateInstructions(currentVersion, newVersion, assetName, downlo
 	if err == nil {
 		exePath, _ = filepath.EvalSymlinks(exePath)
 		fmt.Printf("  sudo mv /tmp/mesdx %s\n", exePath)
-		
-		// Show parser update instructions
-		parserAssetName := parserAssetNameForPlatform()
-		parserURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, newVersion, parserAssetName)
-		exeDir := filepath.Dir(exePath)
-		parserDir := filepath.Join(exeDir, "..", "lib", "mesdx", "parsers")
-		parserDir, _ = filepath.Abs(parserDir)
-		
-		fmt.Printf("\n")
-		fmt.Printf("  # Update parser libraries\n")
-		fmt.Printf("  curl -L %s -o /tmp/parsers.tar.gz\n", parserURL)
-		fmt.Printf("  sudo mkdir -p %s\n", parserDir)
-		fmt.Printf("  sudo tar xzf /tmp/parsers.tar.gz -C %s --strip-components=1\n", parserDir)
 	} else {
 		fmt.Printf("  sudo mv /tmp/mesdx /usr/local/bin/mesdx\n")
-		fmt.Printf("\n")
-		fmt.Printf("  # Update parser libraries (adjust paths as needed)\n")
-		parserAssetName := parserAssetNameForPlatform()
-		parserURL := fmt.Sprintf("https://github.com/%s/releases/download/%s/%s", githubRepo, newVersion, parserAssetName)
-		fmt.Printf("  curl -L %s -o /tmp/parsers.tar.gz\n", parserURL)
-		fmt.Printf("  sudo mkdir -p /usr/local/lib/mesdx/parsers\n")
-		fmt.Printf("  sudo tar xzf /tmp/parsers.tar.gz -C /usr/local/lib/mesdx/parsers --strip-components=1\n")
 	}
 
 	fmt.Printf("\n")

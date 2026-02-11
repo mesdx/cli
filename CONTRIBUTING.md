@@ -1,149 +1,221 @@
-# Contributing to MesDX CLI
+# Contributing to MesDX
 
-Thank you for your interest in contributing to MesDX CLI! This document provides guidelines and instructions for developers.
+Thank you for your interest in contributing to MesDX!
 
 ## Development Setup
 
 ### Prerequisites
 
-- Go 1.25 or later
-- Git
-- C compiler (gcc/clang) for building tree-sitter parsers
-- Make (optional, for convenience)
-
-### First-Time Setup
-
-If the grammar submodules haven't been initialized yet in the repository:
-
-```bash
-# Initialize and commit submodules (one-time)
-bash scripts/init-submodules.sh
-git add .gitmodules third_party/
-git commit -m "Initialize tree-sitter grammar submodules"
-git push
-```
+- **Go 1.21+** - [Download](https://go.dev/dl/)
+- **Git** - For version control
+- **golangci-lint** (optional) - For linting
 
 ### Quick Start
 
-Once submodules are committed:
+1. **Clone the repository**
 
 ```bash
-# One command to build everything
+git clone https://github.com/mesdx/cli.git
+cd cli
+```
+
+2. **Build the project**
+
+```bash
 make build
+```
 
-# Run tests
+This compiles the binary to `dist/mesdx` with all tree-sitter parsers statically linked.
+
+3. **Run tests**
+
+```bash
 make test
-
-# Install locally
-make install
 ```
 
-That's it! The `make build` command will:
-1. Download tree-sitter headers
-2. Initialize grammar submodules (from .gitmodules)
-3. Build parser libraries
-4. Build the Go binary
-
-### Manual Setup
-
-If you don't have Make:
-
-```bash
-# Build everything (headers + parsers + binary)
-bash scripts/build-all.sh
-
-# Run tests
-export MESDX_PARSER_DIR=$(pwd)/dist/parsers
-go test -v ./...
-```
-
-### Install for Development
+4. **Install locally for testing**
 
 ```bash
 make install
 ```
 
-This installs:
-- Binary to `~/.local/bin/mesdx`
-- Parsers to `~/.local/lib/mesdx/parsers/`
+This installs to `~/.local/bin/mesdx`.
 
-Make sure `~/.local/bin` is in your PATH.
+## Project Structure
+
+```
+cli/
+├── cmd/mesdx/           # Main CLI entry point
+├── internal/
+│   ├── cli/             # CLI commands
+│   ├── db/              # SQLite database layer
+│   ├── indexer/         # Symbol indexing engine
+│   ├── treesitter/      # Tree-sitter parsing (static bindings)
+│   ├── memory/          # Memory/notes system
+│   ├── search/          # FTS5 search
+│   └── selfupdate/      # Auto-update functionality
+├── Makefile             # Build targets
+└── go.mod               # Go dependencies
+```
+
+## Architecture
+
+### Parsing
+
+MesDX uses **tree-sitter** for precise syntax parsing. All language parsers are **statically compiled** into the binary using official Go bindings:
+
+- `github.com/tree-sitter/tree-sitter-go/bindings/go`
+- `github.com/tree-sitter/tree-sitter-java/bindings/go`
+- `github.com/tree-sitter/tree-sitter-rust/bindings/go`
+- `github.com/tree-sitter/tree-sitter-python/bindings/go`
+- `github.com/tree-sitter/tree-sitter-javascript/bindings/go`
+- `github.com/tree-sitter/tree-sitter-typescript/bindings/go`
+
+Query files (`.scm`) define patterns for extracting symbols and references:
+- `internal/treesitter/queries/*.scm`
+
+### Adding a New Language
+
+To add support for a new language:
+
+1. **Add the Go binding dependency**
+
+```bash
+go get github.com/tree-sitter/tree-sitter-LANGUAGE/bindings/go@latest
+```
+
+2. **Update `internal/treesitter/loader.go`**
+
+Add an import and entry to `languageMap`:
+
+```go
+import tree_sitter_LANGUAGE "github.com/tree-sitter/tree-sitter-LANGUAGE/bindings/go"
+
+var languageMap = map[string]func() unsafe.Pointer{
+    // ... existing languages
+    "LANGUAGE": tree_sitter_LANGUAGE.Language,
+}
+```
+
+3. **Create a query file**
+
+Create `internal/treesitter/queries/LANGUAGE.scm` with tree-sitter queries for:
+- Symbol definitions (`@def.*`)
+- References (`@ref.*`)
+
+See existing `.scm` files for examples.
+
+4. **Update `RequiredLanguages()` in `loader.go`**
+
+5. **Add tests** in `internal/treesitter/extractor_test.go`
+
+6. **Update language detection** in `internal/indexer/indexer.go` if needed
+
+### Indexing Flow
+
+1. **Discovery**: `indexer.Indexer.IndexAll()` walks the file tree
+2. **Parsing**: Each file is parsed by the appropriate tree-sitter parser
+3. **Extraction**: Query patterns extract symbols and references
+4. **Storage**: Symbols/refs are stored in SQLite (`.mesdx/mesdx.db`)
+5. **FTS**: Full-text search index is updated for memories
+
+### Database Schema
+
+See `internal/db/migrations.go` for the full schema. Key tables:
+
+- `symbols` - Symbol definitions (functions, classes, etc.)
+- `refs` - Symbol references (calls, uses)
+- `file_hashes` - Track file changes for incremental updates
+- `memory_elements` - Project notes
+- `memory_fts` - Full-text search index
 
 ## Testing
 
-Run all tests:
+### Run All Tests
 
 ```bash
-make test  # Builds everything if needed, then runs tests
+make test
 ```
 
-Run tests without rebuilding (faster):
+### Run Specific Tests
 
 ```bash
-make test-quick
+go test -v ./internal/indexer -run TestGoParser
 ```
 
-Run tests for a specific package:
+### Test Coverage
 
 ```bash
-export MESDX_PARSER_DIR=$(pwd)/dist/parsers
-go test -v ./internal/repo
-```
-
-### Adding Dependencies
-
-Add a new dependency:
-
-```bash
-go get <package-path>
-```
-
-Update dependencies:
-
-```bash
-go mod tidy
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
 ```
 
 ## Code Style
 
-- Follow standard Go formatting: `gofmt` or `goimports`
-- Use `golangci-lint` for linting (if configured)
-- Write clear, descriptive commit messages
-- Add comments for exported functions and types
+- Run `go fmt` before committing
+- Follow standard Go conventions
+- Use `golangci-lint` for additional checks
 
-## Architecture Notes
+```bash
+make fmt
+make lint
+```
 
-### Repository Detection
+## Making Changes
 
-The `internal/repo` package handles repository root detection:
-- First checks for `.git` directory in current or parent directories
-- Falls back to current working directory if no `.git` found
+1. **Create a feature branch**
 
-### Configuration
+```bash
+git checkout -b feature/my-feature
+```
 
-Configuration is stored as JSON in `.mesdx/config.json` at the repository root.
+2. **Make your changes**
 
-### Database
+- Write tests for new functionality
+- Update documentation as needed
+- Keep commits focused and atomic
 
-SQLite database is stored at `.mesdx/index.db` using the pure-Go driver (no CGO).
+3. **Test thoroughly**
 
-### Parsing
+```bash
+make test
+make build
+./dist/mesdx init # Test on a real repository
+```
 
-MesDX uses tree-sitter for accurate, language-aware parsing:
+4. **Commit**
 
-- Parser libraries are loaded dynamically at runtime via `dlopen`
-- Each language has its own `.dylib` (macOS) or `.so` (Linux) file
-- Query files in `internal/treesitter/queries/*.scm` define how to extract symbols and references
-- The `internal/treesitter` package handles library loading and parsing
-- Grammar sources are tracked as git submodules in `third_party/`
+Use clear, descriptive commit messages:
 
-To add support for a new language:
-1. Add the grammar as a submodule in `.gitmodules`
-2. Update `scripts/build-parsers.sh` to build it
-3. Create a query file in `internal/treesitter/queries/<lang>.scm`
-4. Update `internal/treesitter/extractor.go` to include the new language
-5. Add the language to `internal/indexer/lang.go` and the parser registry
+```bash
+git add .
+git commit -m "Add support for Ruby parsing"
+```
 
-### MCP Server
+5. **Push and create a PR**
 
-The MCP server runs over stdio transport and exposes tools for code intelligence queries.
+```bash
+git push origin feature/my-feature
+```
+
+Then create a Pull Request on GitHub.
+
+## Release Process
+
+Releases are automated via GitHub Actions when a tag is pushed:
+
+1. Maintainer creates a new tag: `git tag v0.x.0`
+2. Push tag: `git push origin v0.x.0`
+3. CI builds binaries for all platforms
+4. Binaries are attached to the GitHub release
+
+**Note**: Tags containing `rc` or `test` are marked as prereleases.
+
+## Getting Help
+
+- **Issues**: [GitHub Issues](https://github.com/mesdx/cli/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/mesdx/cli/discussions)
+
+## License
+
+By contributing, you agree that your contributions will be licensed under the MIT License.
