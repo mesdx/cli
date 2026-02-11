@@ -12,16 +12,50 @@
 (method_declaration
   name: (field_identifier) @def.method)
 
-;; Type definitions
+;; Struct type definitions
 (type_declaration
   (type_spec
     name: (type_identifier) @def.struct
     type: (struct_type)))
 
+;; Interface type definitions
 (type_declaration
   (type_spec
     name: (type_identifier) @def.interface
     type: (interface_type)))
+
+;; Function type definitions
+(type_declaration
+  (type_spec
+    name: (type_identifier) @def.typealias
+    type: (function_type)))
+
+;; Other type definitions (type aliases, new types, etc.)
+(type_declaration
+  (type_spec
+    name: (type_identifier) @def.typealias
+    type: (type_identifier)))
+
+;; Slices, maps, channels, etc. as new types
+(type_declaration
+  (type_spec
+    name: (type_identifier) @def.typealias
+    type: (slice_type)))
+
+(type_declaration
+  (type_spec
+    name: (type_identifier) @def.typealias
+    type: (map_type)))
+
+(type_declaration
+  (type_spec
+    name: (type_identifier) @def.typealias
+    type: (channel_type)))
+
+(type_declaration
+  (type_spec
+    name: (type_identifier) @def.typealias
+    type: (pointer_type)))
 
 ;; Struct fields
 (field_declaration
@@ -39,6 +73,19 @@
 ;; Import declarations (as references)
 (import_spec
   path: (interpreted_string_literal) @ref.import)
+
+;; Function/method calls
+(call_expression
+  function: (identifier) @ref.call)
+
+(call_expression
+  function: (selector_expression
+    field: (field_identifier) @ref.call))
+
+;; Assignment left-hand side (writes)
+(assignment_statement
+  left: (expression_list
+    (identifier) @ref.write))
 
 ;; Identifiers as references
 (identifier) @ref.identifier

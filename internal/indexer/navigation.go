@@ -31,6 +31,9 @@ type UsageResult struct {
 	Name             string   `json:"name"`
 	Kind             string   `json:"kind"`
 	ContextContainer string   `json:"contextContainer,omitempty"`
+	Relation         string   `json:"relation,omitempty"`
+	ReceiverType     string   `json:"receiverType,omitempty"`
+	TargetType       string   `json:"targetType,omitempty"`
 	Location         Location `json:"location"`
 	DependencyScore  float64  `json:"dependencyScore,omitempty"`
 }
@@ -95,7 +98,7 @@ func (n *Navigator) GoToDefinitionByPosition(filePath string, line, col int, lan
 // The lang parameter filters results to files of the specified language.
 func (n *Navigator) FindUsagesByName(name string, filterFile string, lang string) ([]UsageResult, error) {
 	query := `
-		SELECT r.name, r.kind, r.context_container,
+		SELECT r.name, r.kind, r.context_container, r.relation, r.receiver_type, r.target_type,
 		       f.path, r.start_line, r.start_col, r.end_line, r.end_col
 		FROM refs r
 		JOIN files f ON r.file_id = f.id
@@ -115,6 +118,7 @@ func (n *Navigator) FindUsagesByName(name string, filterFile string, lang string
 		var r UsageResult
 		var kindInt int
 		if err := rows.Scan(&r.Name, &kindInt, &r.ContextContainer,
+			&r.Relation, &r.ReceiverType, &r.TargetType,
 			&r.Location.Path, &r.Location.StartLine, &r.Location.StartCol,
 			&r.Location.EndLine, &r.Location.EndCol); err != nil {
 			return nil, err

@@ -59,6 +59,26 @@
   name: (dotted_name
     (identifier) @ref.import))
 
+;; Decorator references (annotations)
+(decorator
+  (identifier) @ref.annotation)
+
+;; Function/method calls
+(call
+  function: (identifier) @ref.call)
+
+(call
+  function: (attribute
+    attribute: (identifier) @ref.call))
+
+;; Assignment left-hand side (writes)
+(assignment
+  left: (identifier) @ref.write)
+
+(assignment
+  left: (pattern_list
+    (identifier) @ref.write))
+
 ;; Identifiers as references
 (identifier) @ref.identifier
 

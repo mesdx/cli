@@ -4,6 +4,10 @@
 (class_declaration
   name: (type_identifier) @def.class)
 
+;; Abstract class declarations
+(abstract_class_declaration
+  name: (type_identifier) @def.class)
+
 ;; Interface declarations
 (interface_declaration
   name: (type_identifier) @def.interface)
@@ -22,6 +26,10 @@
 
 ;; Method definitions
 (method_definition
+  name: (property_identifier) @def.method)
+
+;; Abstract method signatures
+(abstract_method_signature
   name: (property_identifier) @def.method)
 
 ;; Constructor
@@ -62,6 +70,28 @@
     (named_imports
       (import_specifier
         name: (identifier) @ref.import))))
+
+;; Prototype property access
+(member_expression
+  object: (identifier)
+  property: (property_identifier) @ref.prototype
+  (#eq? @ref.prototype "prototype"))
+
+;; Function/method calls
+(call_expression
+  function: (identifier) @ref.call)
+
+(call_expression
+  function: (member_expression
+    property: (property_identifier) @ref.call))
+
+;; Assignment left-hand side (writes)
+(assignment_expression
+  left: (identifier) @ref.write)
+
+(assignment_expression
+  left: (member_expression
+    property: (property_identifier) @ref.write))
 
 ;; Identifiers as references
 (identifier) @ref.identifier

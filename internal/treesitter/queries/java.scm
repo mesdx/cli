@@ -38,6 +38,19 @@
 (import_declaration
   (identifier) @ref.import)
 
+;; Override annotation (method reimplementation)
+(marker_annotation
+  name: (identifier) @ref.annotation
+  (#eq? @ref.annotation "Override"))
+
+;; Method calls
+(method_invocation
+  name: (identifier) @ref.call)
+
+;; Assignment left-hand side (writes)
+(assignment_expression
+  left: (identifier) @ref.write)
+
 ;; Identifiers as references
 (identifier) @ref.identifier
 

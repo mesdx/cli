@@ -71,6 +71,13 @@ func NewExtractor(langName string) (*Extractor, error) {
 	}, nil
 }
 
+// pendingCapture holds a captured node awaiting processing in the two-pass extraction.
+type pendingCapture struct {
+	capName       string
+	node          Node
+	containerName string
+}
+
 // Extract parses source code and extracts symbols and references.
 func (e *Extractor) Extract(filename string, source []byte) (*symbols.FileResult, error) {
 	// Create parser
@@ -106,21 +113,17 @@ func (e *Extractor) Extract(filename string, source []byte) (*symbols.FileResult
 		captureNames[i] = e.query.CaptureNameForID(i)
 	}
 
-	// Track seen symbols to avoid duplicates
-	seenSymbols := make(map[string]bool)
-	seenRefs := make(map[string]bool)
+	// ---------- Pass 1: collect all captures ----------
+	var defCaptures []pendingCapture
+	var refCaptures []pendingCapture
 
-	// Container context for methods
-	containerContext := make(map[string]string) // node pointer -> container name
-
-	// Process matches
 	for {
 		match := cursor.NextMatch()
 		if match == nil {
 			break
 		}
 
-		// Group captures by name
+		// Group captures by name for this match
 		capturesByName := make(map[string][]QueryCapture)
 		for _, cap := range match.Captures {
 			name := captureNames[cap.Index]
@@ -133,125 +136,180 @@ func (e *Extractor) Extract(filename string, source []byte) (*symbols.FileResult
 			containerName = containers[0].Node.Content(source)
 		}
 
-		// Process definition captures
 		for capName, caps := range capturesByName {
-			if !strings.HasPrefix(capName, "def.") {
-				continue
-			}
-
 			for _, cap := range caps {
-				node := cap.Node
-				if node.IsNull() || !node.IsNamed() {
-					continue
+				if strings.HasPrefix(capName, "def.") {
+					defCaptures = append(defCaptures, pendingCapture{
+						capName:       capName,
+						node:          cap.Node,
+						containerName: containerName,
+					})
+				} else if strings.HasPrefix(capName, "ref.") {
+					refCaptures = append(refCaptures, pendingCapture{
+						capName:       capName,
+						node:          cap.Node,
+						containerName: containerName,
+					})
 				}
+			}
+		}
+	}
 
-				name := node.Content(source)
-				if name == "" || isCommonKeyword(name) {
-					continue
-				}
+	// ---------- Pass 2: process definitions ----------
+	seenSymbols := make(map[string]bool)
+	defPositions := make(map[string]bool)
+	containerContext := make(map[string]string)
 
-				// Determine symbol kind
-				kind := mapCaptureToKind(capName)
-				if kind == symbols.KindUnknown {
-					continue
-				}
+	for _, dc := range defCaptures {
+		node := dc.node
+		if node.IsNull() || !node.IsNamed() {
+			continue
+		}
 
-				// Python-specific: Detect constants by naming convention (UPPER_CASE)
-				if e.langName == "python" && kind == symbols.KindVariable && isUpperCaseIdentifier(name) {
-					kind = symbols.KindConstant
-				}
+		name := node.Content(source)
+		if name == "" || isCommonKeyword(name) {
+			continue
+		}
 
-				// Get span
-				startPoint := node.StartPoint()
-				endPoint := node.EndPoint()
+		kind := mapCaptureToKind(dc.capName)
+		if kind == symbols.KindUnknown {
+			continue
+		}
 
-				// For definitions, try to expand to the full declaration node
-				parent := node.Parent()
-				if !parent.IsNull() {
-					endPoint = parent.EndPoint()
-				}
+		// Python-specific: Detect constants by naming convention (UPPER_CASE)
+		if e.langName == "python" && kind == symbols.KindVariable && isUpperCaseIdentifier(name) {
+			kind = symbols.KindConstant
+		}
 
-				// Build unique key to avoid duplicates
-				key := fmt.Sprintf("%s:%d:%d:%s", name, startPoint.Row, startPoint.Column, kind)
-				if seenSymbols[key] {
-					continue
-				}
-				seenSymbols[key] = true
+		startPoint := node.StartPoint()
+		endPoint := node.EndPoint()
 
-				// Store container context for this node
-				if containerName != "" {
-					nodeKey := fmt.Sprintf("%d", node.StartByte())
-					containerContext[nodeKey] = containerName
-				}
+		parent := node.Parent()
+		if !parent.IsNull() {
+			endPoint = parent.EndPoint()
+		}
 
-				// Determine container (for methods)
-				container := containerName
-				if container == "" {
-					// Try to find from parent context
-					parentKey := fmt.Sprintf("%d", parent.StartByte())
-					container = containerContext[parentKey]
-				}
+		symKey := fmt.Sprintf("%s:%d:%d:%s", name, startPoint.Row, startPoint.Column, kind)
+		if seenSymbols[symKey] {
+			continue
+		}
+		seenSymbols[symKey] = true
 
-				sym := symbols.Symbol{
-					Name:          name,
-					Kind:          kind,
-					ContainerName: container,
-					StartLine:     int(startPoint.Row) + 1,
-					StartCol:      int(startPoint.Column),
-					EndLine:       int(endPoint.Row) + 1,
-					EndCol:        int(startPoint.Column) + len(name),
-				}
+		posKey := fmt.Sprintf("%s:%d:%d", name, startPoint.Row, startPoint.Column)
+		defPositions[posKey] = true
 
-				result.Symbols = append(result.Symbols, sym)
+		if dc.containerName != "" {
+			nodeKey := fmt.Sprintf("%d", node.StartByte())
+			containerContext[nodeKey] = dc.containerName
+		}
+
+		container := dc.containerName
+		if container == "" {
+			parentKey := fmt.Sprintf("%d", parent.StartByte())
+			container = containerContext[parentKey]
+		}
+
+		sym := symbols.Symbol{
+			Name:          name,
+			Kind:          kind,
+			ContainerName: container,
+			StartLine:     int(startPoint.Row) + 1,
+			StartCol:      int(startPoint.Column),
+			EndLine:       int(endPoint.Row) + 1,
+			EndCol:        int(startPoint.Column) + len(name),
+		}
+
+		result.Symbols = append(result.Symbols, sym)
+	}
+
+	// ---------- Pass 3: process references ----------
+	// We use semantic deduplication: same position, keep higher priority capture.
+	seenRefs := make(map[string]symbols.Ref) // key = "name:row:col"
+	importNames := make(map[string]bool)
+
+	for _, rc := range refCaptures {
+		node := rc.node
+		if node.IsNull() {
+			continue
+		}
+
+		name := node.Content(source)
+		if name == "" || len(name) <= 1 || isCommonKeyword(name) {
+			continue
+		}
+
+		startPoint := node.StartPoint()
+
+		// Skip if this position is a definition (avoid double-counting)
+		posKey := fmt.Sprintf("%s:%d:%d", name, startPoint.Row, startPoint.Column)
+		if defPositions[posKey] {
+			continue
+		}
+
+		refKey := fmt.Sprintf("%s:%d:%d", name, startPoint.Row, startPoint.Column)
+		refKind := mapCaptureToRefKind(rc.capName)
+		relation := mapCaptureToRelation(rc.capName)
+
+		// Semantic deduplication: if we've seen this ref position, keep the higher priority one
+		if existing, seen := seenRefs[refKey]; seen {
+			existingPriority := refSemanticPriority(existing.Kind, existing.Relation)
+			newPriority := refSemanticPriority(refKind, relation)
+			if newPriority <= existingPriority {
+				continue // Keep existing higher-priority ref
+			}
+			// Otherwise, replace with new higher-priority ref
+		}
+
+		// Go-specific: import paths are string literals with quotes;
+		// strip them and extract the package name (last path segment).
+		if refKind == symbols.RefImport && e.langName == "go" {
+			name = strings.Trim(name, "\"'`")
+			if idx := strings.LastIndex(name, "/"); idx >= 0 {
+				name = name[idx+1:]
+			}
+			if name == "" || len(name) <= 1 {
+				continue
 			}
 		}
 
-		// Process reference captures
-		for capName, caps := range capturesByName {
-			if !strings.HasPrefix(capName, "ref.") {
-				continue
-			}
-
-			for _, cap := range caps {
-				node := cap.Node
-				if node.IsNull() {
-					continue
-				}
-
-				name := node.Content(source)
-				if name == "" || len(name) <= 1 || isCommonKeyword(name) {
-					continue
-				}
-
-				// Skip if this is a definition (avoid double-counting)
-				startPoint := node.StartPoint()
-				defKey := fmt.Sprintf("%s:%d:%d", name, startPoint.Row, startPoint.Column)
-				if seenSymbols[defKey] {
-					continue
-				}
-
-				// Build unique key for refs
-				endPoint := node.EndPoint()
-				refKey := fmt.Sprintf("%s:%d:%d", name, startPoint.Row, startPoint.Column)
-				if seenRefs[refKey] {
-					continue
-				}
-				seenRefs[refKey] = true
-
-				refKind := mapCaptureToRefKind(capName)
-
-				ref := symbols.Ref{
-					Name:      name,
-					Kind:      refKind,
-					StartLine: int(startPoint.Row) + 1,
-					StartCol:  int(startPoint.Column),
-					EndLine:   int(endPoint.Row) + 1,
-					EndCol:    int(endPoint.Column),
-				}
-
-				result.Refs = append(result.Refs, ref)
-			}
+		// Track import names
+		if refKind == symbols.RefImport {
+			importNames[name] = true
 		}
+
+		// Classify builtin
+		isBuiltin := IsBuiltin(e.langName, name)
+
+		// Classify external: import refs are always external;
+		// non-builtin refs that match a previously seen import name are external too.
+		isExternal := refKind == symbols.RefImport
+		if !isExternal && !isBuiltin && importNames[name] {
+			isExternal = true
+		}
+
+		endPoint := node.EndPoint()
+
+		ref := symbols.Ref{
+			Name:             name,
+			Kind:             refKind,
+			IsExternal:       isExternal,
+			IsBuiltin:        isBuiltin,
+			Relation:         relation,
+			ReceiverType:     "", // TODO: extract from parent node context if needed
+			TargetType:       "", // TODO: for type refs, could extract target type
+			StartLine:        int(startPoint.Row) + 1,
+			StartCol:         int(startPoint.Column),
+			EndLine:          int(endPoint.Row) + 1,
+			EndCol:           int(endPoint.Column),
+			ContextContainer: rc.containerName,
+		}
+
+		seenRefs[refKey] = ref
+	}
+
+	// Collect all refs (deduplicated)
+	for _, ref := range seenRefs {
+		result.Refs = append(result.Refs, ref)
 	}
 
 	return result, nil
@@ -304,11 +362,71 @@ func mapCaptureToKind(capName string) symbols.SymbolKind {
 	}
 }
 
+// mapCaptureToRelation maps a capture name to a semantic relation string.
+func mapCaptureToRelation(capName string) string {
+	switch capName {
+	case "ref.inherit":
+		return "inherits"
+	case "ref.implements":
+		return "implements"
+	case "ref.annotation":
+		return "annotation"
+	case "ref.prototype":
+		return "prototype"
+	default:
+		return ""
+	}
+}
+
+// refSemanticPriority returns priority for deduplication (higher = more specific).
+// When multiple captures target the same position, keep the most semantic one.
+func refSemanticPriority(kind symbols.RefKind, relation string) int {
+	// Most semantic: inheritance, interface implementation, override
+	if kind == symbols.RefInherit {
+		if relation == "implements" {
+			return 100
+		}
+		return 90 // inherits
+	}
+	if kind == symbols.RefAnnotation {
+		return 80
+	}
+	if kind == symbols.RefCall {
+		return 70
+	}
+	if kind == symbols.RefWrite {
+		return 60
+	}
+	if kind == symbols.RefImport {
+		return 50
+	}
+	if kind == symbols.RefTypeRef {
+		return 40
+	}
+	if kind == symbols.RefRead {
+		return 30
+	}
+	// Fallback/generic
+	return 10
+}
+
 // mapCaptureToRefKind maps a capture name to a reference kind.
 func mapCaptureToRefKind(capName string) symbols.RefKind {
 	switch capName {
 	case "ref.import":
 		return symbols.RefImport
+	case "ref.type":
+		return symbols.RefTypeRef
+	case "ref.inherit", "ref.implements":
+		return symbols.RefInherit
+	case "ref.attribute", "ref.annotation":
+		return symbols.RefAnnotation
+	case "ref.call":
+		return symbols.RefCall
+	case "ref.write":
+		return symbols.RefWrite
+	case "ref.field", "ref.property", "ref.prototype":
+		return symbols.RefRead
 	default:
 		return symbols.RefOther
 	}
@@ -329,7 +447,7 @@ func isCommonKeyword(s string) bool {
 		"function": true, "async": true, "await": true, "yield": true,
 		"public": true, "private": true, "protected": true, "static": true,
 		"final": true, "abstract": true, "interface": true, "enum": true,
-		"struct": true, "trait": true, "impl": true, "type": true,
+		"struct": true, "trait": true, "impl": true,
 		"fn": true, "pub": true, "mod": true, "use": true, "self": true,
 		"Self": true, "crate": true, "match": true, "loop": true,
 		"mut": true, "ref": true, "unsafe": true, "extern": true,
