@@ -752,16 +752,21 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 			d.Location.Path, d.Location.StartLine)
 	}
 
-	// Symbol graph stats
-	inboundCount := 0
-	outboundCount := 0
-	for _, e := range g.SymbolGraph.Edges {
-		if e.Kind == "inbound" {
-			inboundCount++
-		} else {
-			outboundCount++
-		}
+	// Dependency summary (inbound / outbound overview)
+	b.WriteString("\n## Dependency Summary\n\n")
+	b.WriteString("| Direction | Files | Count | Avg Score |\n")
+	b.WriteString("|-----------|-------|-------|----------|\n")
+	fmt.Fprintf(&b, "| Inbound (who depends on this) | %d | %d usages | %.2f |\n",
+		g.Inbound.TotalFiles, g.Inbound.TotalUsages, g.Inbound.Score)
+	fmt.Fprintf(&b, "| Outbound (what this depends on) | %d | %d symbols | %.2f |\n",
+		g.Outbound.TotalFiles, len(g.Outbound.Edges), g.Outbound.Score)
+	if g.Metrics.ImpactScore > 0 || g.Metrics.CouplingScore > 0 {
+		fmt.Fprintf(&b, "\n**Impact Score** (how critical to dependents): %.2f  \n", g.Metrics.ImpactScore)
+		fmt.Fprintf(&b, "**Coupling Score** (how dependent on others): %.2f\n", g.Metrics.CouplingScore)
 	}
+
+	inboundCount := len(g.Inbound.Edges)
+	outboundCount := len(g.Outbound.Edges)
 
 	// Mermaid graph for file dependencies
 	if len(g.FileGraph) > 0 {
@@ -808,10 +813,12 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 	}
 
 	// Mermaid graph for symbol dependencies (top N only for readability)
-	if len(g.SymbolGraph.Edges) > 0 {
+	totalEdges := inboundCount + outboundCount
+	totalNodes := len(g.Inbound.Nodes) + len(g.Outbound.Nodes) + 1 // +1 for primary
+	if totalEdges > 0 {
 		b.WriteString("\n## Symbol Dependency Graph\n\n")
 		fmt.Fprintf(&b, "**Nodes**: %d | **Edges**: %d (%d inbound, %d outbound)\n\n",
-			len(g.SymbolGraph.Nodes), len(g.SymbolGraph.Edges), inboundCount, outboundCount)
+			totalNodes, totalEdges, inboundCount, outboundCount)
 
 		b.WriteString("```mermaid\n")
 		b.WriteString("graph TD\n")
@@ -823,12 +830,8 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 			fmt.Fprintf(&b, "    style %s fill:#f9f,stroke:#333,stroke-width:3px\n", primaryID)
 
 			// Inbound edges (limit to top 15 by score)
-			inboundEdges := []indexer.DepGraphEdge{}
-			for _, e := range g.SymbolGraph.Edges {
-				if e.Kind == "inbound" {
-					inboundEdges = append(inboundEdges, e)
-				}
-			}
+			inboundEdges := make([]indexer.DepGraphEdge, len(g.Inbound.Edges))
+			copy(inboundEdges, g.Inbound.Edges)
 			// Sort by score descending
 			for i := 0; i < len(inboundEdges); i++ {
 				for j := i + 1; j < len(inboundEdges); j++ {
@@ -859,24 +862,16 @@ func formatDependencyGraph(g *indexer.DependencyGraph) string {
 			}
 
 			// Outbound edges (limit to top 15)
-			outboundEdges := []indexer.DepGraphEdge{}
-			for _, e := range g.SymbolGraph.Edges {
-				if e.Kind == "outbound" {
-					outboundEdges = append(outboundEdges, e)
-				}
-			}
-			for i, e := range outboundEdges {
+			for i, e := range g.Outbound.Edges {
 				if i >= displayLimit {
-					if len(outboundEdges) > displayLimit {
+					if len(g.Outbound.Edges) > displayLimit {
 						moreID := sanitizeMermaidID("more_outbound")
-						fmt.Fprintf(&b, "    %s[\"... %d more symbols\"]\n", moreID, len(outboundEdges)-displayLimit)
+						fmt.Fprintf(&b, "    %s[\"... %d more symbols\"]\n", moreID, len(g.Outbound.Edges)-displayLimit)
 						fmt.Fprintf(&b, "    %s -.-> %s\n", primaryID, moreID)
 					}
 					break
 				}
-				// Parse To as "path:name:line"
 				toID := sanitizeMermaidID(e.To)
-				// Extract symbol name from node ID
 				symbolName := extractSymbolFromNodeID(e.To)
 				fmt.Fprintf(&b, "    %s[\"%s\"]\n", toID, symbolName)
 				edgeLabel := fmt.Sprintf("%.2f", e.Score)

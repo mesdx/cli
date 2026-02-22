@@ -22,14 +22,29 @@ func TestFormatDependencyGraph_Mermaid(t *testing.T) {
 		DefinitionCandidates: []indexer.DefinitionResult{
 			{Name: "TestFunc", Kind: "function", Location: indexer.Location{Path: "pkg/foo.go", StartLine: 10}},
 		},
-		SymbolGraph: indexer.SymbolGraph{
+		PrimaryNode: &indexer.DepGraphNode{
+			ID: "pkg/foo.go:TestFunc:10", Name: "TestFunc", Kind: "function", Path: "pkg/foo.go", StartLine: 10, EndLine: 20,
+		},
+		Inbound: indexer.DepGraphSection{
 			Nodes: []indexer.DepGraphNode{
-				{ID: "pkg/foo.go:TestFunc:10", Name: "TestFunc", Kind: "function", Path: "pkg/foo.go", StartLine: 10, EndLine: 20},
+				{ID: "pkg/bar.go", Name: "pkg/bar.go", Kind: "file", Path: "pkg/bar.go"},
 			},
 			Edges: []indexer.DepGraphEdge{
-				{From: "pkg/bar.go", To: "pkg/foo.go:TestFunc:10", Kind: "inbound", Score: 0.85, Count: 3, FilePath: "pkg/bar.go"},
-				{From: "pkg/foo.go:TestFunc:10", To: "pkg/util.go:Helper:5", Kind: "outbound", Score: 0.75, Count: 2, FilePath: "pkg/util.go"},
+				{From: "pkg/bar.go", To: "pkg/foo.go:TestFunc:10", Score: 0.85, Count: 3, FilePath: "pkg/bar.go"},
 			},
+			TotalFiles:  1,
+			TotalUsages: 1,
+			Score:       0.85,
+		},
+		Outbound: indexer.DepGraphSection{
+			Nodes: []indexer.DepGraphNode{
+				{ID: "pkg/util.go:Helper:5", Name: "Helper", Kind: "function", Path: "pkg/util.go", StartLine: 5},
+			},
+			Edges: []indexer.DepGraphEdge{
+				{From: "pkg/foo.go:TestFunc:10", To: "pkg/util.go:Helper:5", Score: 0.75, Count: 2, FilePath: "pkg/util.go"},
+			},
+			TotalFiles: 1,
+			Score:      0.75,
 		},
 		FileGraph: []indexer.FileGraphEdge{
 			{From: "pkg/bar.go", To: "pkg/foo.go", Score: 0.85, Count: 3},
@@ -81,7 +96,8 @@ func TestFormatDependencyGraph_EmptyGraph(t *testing.T) {
 	graph := &indexer.DependencyGraph{
 		PrimaryDefinition:    nil,
 		DefinitionCandidates: []indexer.DefinitionResult{},
-		SymbolGraph:          indexer.SymbolGraph{Nodes: []indexer.DepGraphNode{}, Edges: []indexer.DepGraphEdge{}},
+		Inbound:              indexer.DepGraphSection{Nodes: []indexer.DepGraphNode{}, Edges: []indexer.DepGraphEdge{}},
+		Outbound:             indexer.DepGraphSection{Nodes: []indexer.DepGraphNode{}, Edges: []indexer.DepGraphEdge{}},
 		FileGraph:            []indexer.FileGraphEdge{},
 		Usages:               []indexer.ScoredUsage{},
 	}

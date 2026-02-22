@@ -488,19 +488,13 @@ func TestBuildDependencyGraph_Go(t *testing.T) {
 		t.Errorf("expected primary def name SayHello, got %s", graph.PrimaryDefinition.Name)
 	}
 
-	// Should have at least the primary node.
-	if len(graph.SymbolGraph.Nodes) == 0 {
-		t.Error("expected at least one node in symbol graph")
+	// Should have the primary node.
+	if graph.PrimaryNode == nil {
+		t.Error("expected PrimaryNode to be set")
 	}
 
 	// SayHello calls NewPerson, uses DefaultName, MaxRetries → outbound edges.
-	outboundCount := 0
-	for _, e := range graph.SymbolGraph.Edges {
-		if e.Kind == "outbound" {
-			outboundCount++
-		}
-	}
-	if outboundCount == 0 {
+	if len(graph.Outbound.Edges) == 0 {
 		t.Error("expected outbound edges for SayHello (it calls NewPerson, uses DefaultName, etc.)")
 	}
 
@@ -553,8 +547,8 @@ func TestBuildDependencyGraph_NilPrimaryDef(t *testing.T) {
 	if graph.PrimaryDefinition != nil {
 		t.Error("expected nil PrimaryDefinition")
 	}
-	if len(graph.SymbolGraph.Nodes) != 0 {
-		t.Error("expected empty nodes for nil primary def")
+	if graph.PrimaryNode != nil {
+		t.Error("expected nil PrimaryNode for nil primary def")
 	}
 }
 
