@@ -39,12 +39,16 @@ type DepGraphNode struct {
 
 // DepGraphEdge represents a directed edge in the symbol dependency graph.
 type DepGraphEdge struct {
-	From     string  `json:"from"`
-	To       string  `json:"to"`
-	Kind     string  `json:"kind"` // "inbound" or "outbound"
-	Score    float64 `json:"score"`
-	Count    int     `json:"count"`
-	FilePath string  `json:"filePath,omitempty"`
+	From         string  `json:"from"`
+	To           string  `json:"to"`
+	Kind         string  `json:"kind"` // "inbound" or "outbound"
+	Score        float64 `json:"score"`
+	Count        int     `json:"count"`
+	FilePath     string  `json:"filePath,omitempty"`
+	RefKind      string  `json:"refKind,omitempty"`      // "call", "inherit", "write", etc.
+	Relation     string  `json:"relation,omitempty"`     // "implements", "inherits", "prototype", etc.
+	ReceiverType string  `json:"receiverType,omitempty"` // for method calls
+	TargetType   string  `json:"targetType,omitempty"`   // for type refs
 }
 
 // FileGraphEdge represents a directed edge in the file-level graph.
@@ -176,6 +180,9 @@ func scoreOneUsage(
 		// 6. Structured ref kind boost.
 		w *= refKindCompatibility(usage.Kind, def.Kind)
 
+		// 7. Relationship semantics boost (LSP-style annotations).
+		w *= relationBoost(usage.Relation)
+
 		weights[i] = w
 	}
 
@@ -295,7 +302,7 @@ func refKindCompatibility(refKind, defKind string) float64 {
 		return 0.6
 	case "inherit":
 		if defKind == "class" || defKind == "interface" || defKind == "trait" {
-			return boostRefKindMatch
+			return boostRefKindMatch * 1.2 // inheritance is very semantic
 		}
 		return 0.5
 	case "call":
@@ -303,10 +310,36 @@ func refKindCompatibility(refKind, defKind string) float64 {
 			return boostRefKindMatch
 		}
 		return 0.6
+	case "write":
+		if defKind == "field" || defKind == "variable" || defKind == "property" {
+			return boostRefKindMatch * 0.8
+		}
+		return 0.7
+	case "read":
+		if defKind == "field" || defKind == "variable" || defKind == "property" || defKind == "constant" {
+			return 1.5
+		}
+		return 0.8
 	case "annotation":
 		return 1.2
 	default:
-		return 1.0 // "other", "read", "write" → neutral
+		return 1.0 // "other" → neutral
+	}
+}
+
+// relationBoost returns an additional multiplier based on relationship semantics.
+func relationBoost(relation string) float64 {
+	switch relation {
+	case "implements":
+		return 1.5 // interface implementation is highly semantic
+	case "inherits":
+		return 1.3 // class inheritance is highly semantic
+	case "annotation":
+		return 1.1
+	case "prototype":
+		return 1.2 // JS/TS prototype access
+	default:
+		return 1.0
 	}
 }
 
@@ -494,15 +527,24 @@ func BuildDependencyGraph(
 			e.Count++
 			if su.DependencyScore > e.Score {
 				e.Score = su.DependencyScore
+				// Update metadata from highest-scored usage
+				e.RefKind = su.Kind
+				e.Relation = su.Relation
+				e.ReceiverType = su.ReceiverType
+				e.TargetType = su.TargetType
 			}
 		} else {
 			inbound[key] = &DepGraphEdge{
-				From:     su.Location.Path,
-				To:       primaryNodeID,
-				Kind:     "inbound",
-				Score:    su.DependencyScore,
-				Count:    1,
-				FilePath: su.Location.Path,
+				From:         su.Location.Path,
+				To:           primaryNodeID,
+				Kind:         "inbound",
+				Score:        su.DependencyScore,
+				Count:        1,
+				FilePath:     su.Location.Path,
+				RefKind:      su.Kind,
+				Relation:     su.Relation,
+				ReceiverType: su.ReceiverType,
+				TargetType:   su.TargetType,
 			}
 		}
 	}
@@ -596,23 +638,55 @@ func computeOutbound(
 		})
 
 		// Count how many refs to this name inside the span.
+		// Also capture the most semantic ref metadata (highest RefKind priority).
 		count := 0
-		for _, r := range refs {
-			if r.Name == refName {
+		var bestRef *UsageResult
+		for i := range refs {
+			if refs[i].Name == refName {
 				count++
+				if bestRef == nil || refPriority(refs[i].Kind) > refPriority(bestRef.Kind) {
+					bestRef = &refs[i]
+				}
 			}
 		}
 
-		result.edges = append(result.edges, DepGraphEdge{
+		edge := DepGraphEdge{
 			From:     defNodeID,
 			To:       targetNodeID,
 			Kind:     "outbound",
 			Score:    1.0 / math.Sqrt(float64(len(defs))), // uniqueness-based score
 			Count:    count,
 			FilePath: best.Location.Path,
-		})
+		}
+		if bestRef != nil {
+			edge.RefKind = bestRef.Kind
+			edge.Relation = bestRef.Relation
+			edge.ReceiverType = bestRef.ReceiverType
+			edge.TargetType = bestRef.TargetType
+		}
+		result.edges = append(result.edges, edge)
 	}
 	return result, nil
+}
+
+// refPriority returns priority for choosing most semantic ref (for outbound edges).
+func refPriority(refKind string) int {
+	switch refKind {
+	case "inherit":
+		return 100
+	case "call":
+		return 70
+	case "write":
+		return 60
+	case "import":
+		return 50
+	case "type_ref":
+		return 40
+	case "read":
+		return 30
+	default:
+		return 10
+	}
 }
 
 // pickBestCandidate returns the definition most likely referenced from

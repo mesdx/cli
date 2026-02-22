@@ -3,12 +3,20 @@ module github.com/mesdx/cli
 go 1.25.1
 
 require (
+	github.com/blevesearch/bleve/v2 v2.5.3
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.2.0
 	github.com/spf13/cobra v1.10.2
+	github.com/tree-sitter/go-tree-sitter v0.25.0
+	github.com/tree-sitter/tree-sitter-go v0.25.0
+	github.com/tree-sitter/tree-sitter-java v0.23.5
+	github.com/tree-sitter/tree-sitter-javascript v0.25.0
+	github.com/tree-sitter/tree-sitter-python v0.25.0
+	github.com/tree-sitter/tree-sitter-rust v0.24.0
+	github.com/tree-sitter/tree-sitter-typescript v0.23.2
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.44.3
 )
@@ -18,7 +26,6 @@ require (
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/bits-and-blooms/bitset v1.22.0 // indirect
-	github.com/blevesearch/bleve/v2 v2.5.3 // indirect
 	github.com/blevesearch/bleve_index_api v1.2.8 // indirect
 	github.com/blevesearch/geo v0.2.4 // indirect
 	github.com/blevesearch/go-faiss v1.0.25 // indirect
@@ -54,6 +61,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-localereader v0.0.1 // indirect
+	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/mitchellh/hashstructure/v2 v2.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect

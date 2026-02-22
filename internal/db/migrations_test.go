@@ -140,6 +140,88 @@ func TestBackfillV1(t *testing.T) {
 	}
 }
 
+func TestMigrationV3AddsExternalBuiltinAndRelationshipColumns(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	if err := Initialize(dbPath); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
+
+	d, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = d.Close() }()
+
+	// Verify is_external column exists on symbols table
+	var cid int
+	var colName, colType string
+	var notNull, pk int
+	var dfltValue sql.NullString
+	foundSymbolExternal := false
+	rows, err := d.Query(`PRAGMA table_info(symbols)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(symbols): %v", err)
+	}
+	for rows.Next() {
+		if err := rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		if colName == "is_external" {
+			foundSymbolExternal = true
+		}
+	}
+	_ = rows.Close()
+	if !foundSymbolExternal {
+		t.Error("symbols table missing is_external column")
+	}
+
+	// Verify all new columns exist on refs table
+	foundExternal := false
+	foundBuiltin := false
+	foundRelation := false
+	foundReceiverType := false
+	foundTargetType := false
+	
+	rows, err = d.Query(`PRAGMA table_info(refs)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(refs): %v", err)
+	}
+	for rows.Next() {
+		if err := rows.Scan(&cid, &colName, &colType, &notNull, &dfltValue, &pk); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		switch colName {
+		case "is_external":
+			foundExternal = true
+		case "is_builtin":
+			foundBuiltin = true
+		case "relation":
+			foundRelation = true
+		case "receiver_type":
+			foundReceiverType = true
+		case "target_type":
+			foundTargetType = true
+		}
+	}
+	_ = rows.Close()
+	
+	if !foundExternal {
+		t.Error("refs table missing is_external column")
+	}
+	if !foundBuiltin {
+		t.Error("refs table missing is_builtin column")
+	}
+	if !foundRelation {
+		t.Error("refs table missing relation column")
+	}
+	if !foundReceiverType {
+		t.Error("refs table missing receiver_type column")
+	}
+	if !foundTargetType {
+		t.Error("refs table missing target_type column")
+	}
+}
+
 func TestInitializeCreatesDirectory(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "sub", "dir")
 	dbPath := filepath.Join(dir, "test.db")

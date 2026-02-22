@@ -1,6 +1,9 @@
 <div align="center">
   <img src="icon.png" alt="MesDX" width="128" height="128">
   <h1>MesDX</h1>
+  
+  [![Test](https://github.com/mesdx/cli/actions/workflows/test.yml/badge.svg)](https://github.com/mesdx/cli/actions/workflows/test.yml)
+  [![Release](https://github.com/mesdx/cli/actions/workflows/release.yml/badge.svg)](https://github.com/mesdx/cli/actions/workflows/release.yml)
 </div>
 
 MesDX is a **local-first code intelligence MCP server** that indexes your repository and exposes reliable, structured navigation tools to agents like **Claude Code** (and other MCP clients). 🔍🧭
@@ -36,27 +39,12 @@ curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-arm64
 chmod +x "$install_dir/mesdx"
 ```
 
-**macOS (Intel):**
-```bash
-install_dir="$HOME/.local/bin"
-mkdir -p "$install_dir"
-curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-darwin-amd64 -o "$install_dir/mesdx"
-chmod +x "$install_dir/mesdx"
-```
-
-**Linux:**
+**Linux (AMD64):**
 ```bash
 install_dir="$HOME/.local/bin"
 mkdir -p "$install_dir"
 
-# Choose ONE:
-# AMD64
 curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-linux-amd64 -o "$install_dir/mesdx"
-
-# ARM64
-# curl -L https://github.com/mesdx/cli/releases/latest/download/mesdx-linux-arm64 -o "$install_dir/mesdx"
-
-chmod +x "$install_dir/mesdx"
 ```
 
 Make sure `~/.local/bin` is on your `PATH`:

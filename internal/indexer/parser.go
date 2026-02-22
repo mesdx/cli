@@ -1,6 +1,8 @@
 package indexer
 
-import "github.com/mesdx/cli/internal/symbols"
+import (
+	"github.com/mesdx/cli/internal/symbols"
+)
 
 // Parser extracts symbols and references from source code.
 type Parser interface {
@@ -12,12 +14,13 @@ type Parser interface {
 var parserRegistry = map[Lang]Parser{}
 
 func init() {
-	parserRegistry[LangGo] = &GoParser{}
-	parserRegistry[LangJava] = &JavaParser{}
-	parserRegistry[LangRust] = &RustParser{}
-	parserRegistry[LangPython] = &PythonParser{}
-	parserRegistry[LangTypeScript] = &TypeScriptParser{}
-	parserRegistry[LangJavaScript] = &TypeScriptParser{} // JS uses the same regex patterns
+	// Use tree-sitter parsers for all languages
+	parserRegistry[LangGo] = NewTreeSitterParser("go")
+	parserRegistry[LangJava] = NewTreeSitterParser("java")
+	parserRegistry[LangRust] = NewTreeSitterParser("rust")
+	parserRegistry[LangPython] = NewTreeSitterParser("python")
+	parserRegistry[LangTypeScript] = NewTreeSitterParser("typescript")
+	parserRegistry[LangJavaScript] = NewTreeSitterParser("javascript")
 }
 
 // GetParser returns the parser for the given language, or nil if unsupported.

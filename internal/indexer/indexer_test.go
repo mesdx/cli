@@ -42,7 +42,7 @@ func TestGoParser(t *testing.T) {
 		t.Fatalf("read fixture: %v", err)
 	}
 
-	parser := &GoParser{}
+	parser := NewTreeSitterParser("go")
 	result, err := parser.Parse("sample.go", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -74,7 +74,7 @@ func TestJavaParser(t *testing.T) {
 		t.Fatalf("read fixture: %v", err)
 	}
 
-	parser := &JavaParser{}
+	parser := NewTreeSitterParser("java")
 	result, err := parser.Parse("Sample.java", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -99,7 +99,7 @@ func TestRustParser(t *testing.T) {
 		t.Fatalf("read fixture: %v", err)
 	}
 
-	parser := &RustParser{}
+	parser := NewTreeSitterParser("rust")
 	result, err := parser.Parse("sample.rs", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -125,7 +125,7 @@ func TestPythonParser(t *testing.T) {
 		t.Fatalf("read fixture: %v", err)
 	}
 
-	parser := &PythonParser{}
+	parser := NewTreeSitterParser("python")
 	result, err := parser.Parse("sample.py", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -151,7 +151,7 @@ func TestTypeScriptParser(t *testing.T) {
 		t.Fatalf("read fixture: %v", err)
 	}
 
-	parser := &TypeScriptParser{}
+	parser := NewTreeSitterParser("typescript")
 	result, err := parser.Parse("sample.ts", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -178,7 +178,7 @@ func TestJavaScriptParser(t *testing.T) {
 	}
 
 	// JS uses the same parser as TS
-	parser := &TypeScriptParser{}
+	parser := NewTreeSitterParser("typescript")
 	result, err := parser.Parse("sample.js", src)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
