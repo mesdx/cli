@@ -60,6 +60,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Extract changelog entry
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          bash scripts/extract-changelog.sh "$VERSION" > changelog-entry.md
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -88,6 +93,6 @@ jobs:
           files: ./artifacts/**/*
           draft: false
           prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
-          generate_release_notes: true
+          body_path: changelog-entry.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
