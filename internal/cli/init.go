@@ -194,16 +194,15 @@ func runInit(cmd *cobra.Command, args []string) error {
 		cmd.Printf("%s Warning: failed to update ignore files: %v\n", infoStyle.Render("!"), err)
 	}
 
-	// Prompt to create/update CLAUDE.md
-	if err := promptAndUpdateClaudeMd(cmd, repoRoot); err != nil {
-		// Non-fatal, just log
-		cmd.Printf("%s Warning: failed to create/update CLAUDE.md: %v\n", infoStyle.Render("!"), err)
+	// Detect AI assistants and prompt to write guidance
+	if err := promptAndUpdateAssistantGuidance(cmd, repoRoot); err != nil {
+		cmd.Printf("%s Warning: failed to update assistant guidance: %v\n", infoStyle.Render("!"), err)
 	}
 
 	cmd.Printf("\n%s Initialization complete!\n", successStyle.Render("✓"))
 	cmd.Println("Next steps:")
 	cmd.Println("  - Run 'mesdx mcp' to start the MCP server")
-	cmd.Println("  - Configure Claude Code to use this MCP server")
+	cmd.Println("  - Configure your AI assistant to use this MCP server (see guidance files above)")
 
 	return nil
 }
@@ -212,64 +211,6 @@ const (
 	claudeMdBeginMarker = "<!-- mesdx:begin -->"
 	claudeMdEndMarker   = "<!-- mesdx:end -->"
 )
-
-// promptAndUpdateClaudeMd prompts the user to create/update CLAUDE.md with MesDX guidance.
-func promptAndUpdateClaudeMd(cmd *cobra.Command, repoRoot string) error {
-	claudeMdPath := filepath.Join(repoRoot, "CLAUDE.md")
-
-	// Check if CLAUDE.md exists and has MesDX markers
-	existingContent := ""
-	_, err := os.Stat(claudeMdPath)
-	claudeMdExists := err == nil
-	hasMesdxSection := false
-
-	if claudeMdExists {
-		content, err := os.ReadFile(claudeMdPath)
-		if err == nil {
-			existingContent = string(content)
-			hasMesdxSection = strings.Contains(existingContent, claudeMdBeginMarker)
-		}
-	}
-
-	// Prompt user
-	var shouldUpdate bool
-	promptText := "Add MesDX MCP guidance to CLAUDE.md?"
-	if hasMesdxSection {
-		promptText = "Update MesDX MCP guidance in CLAUDE.md?"
-	}
-
-	confirmForm := huh.NewForm(
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title(promptText).
-				Description("This will add/update a managed section with setup instructions and tool overview.").
-				Value(&shouldUpdate),
-		),
-	)
-
-	if err := confirmForm.Run(); err != nil {
-		return fmt.Errorf("prompt failed: %w", err)
-	}
-
-	if !shouldUpdate {
-		return nil
-	}
-
-	// Generate or update CLAUDE.md
-	if err := updateClaudeMd(claudeMdPath, repoRoot, claudeMdExists); err != nil {
-		return err
-	}
-
-	if hasMesdxSection {
-		cmd.Printf("%s Updated MesDX guidance in CLAUDE.md\n", successStyle.Render("✓"))
-	} else if claudeMdExists {
-		cmd.Printf("%s Added MesDX guidance to CLAUDE.md\n", successStyle.Render("✓"))
-	} else {
-		cmd.Printf("%s Created CLAUDE.md with MesDX guidance\n", successStyle.Render("✓"))
-	}
-
-	return nil
-}
 
 // updateClaudeMd creates or updates CLAUDE.md with the managed MesDX section.
 func updateClaudeMd(path string, repoRoot string, exists bool) error {
@@ -319,9 +260,9 @@ func updateManagedSection(existing string, managedContent string) string {
 	return buf.String()
 }
 
-// generateMesdxGuidance generates the managed MesDX guidance content.
+// generateMesdxGuidance generates the managed MesDX guidance content for CLAUDE.md.
 func generateMesdxGuidance(repoRoot string) string {
-	_ = repoRoot // Not used in template, but kept for future extensibility
+	_ = repoRoot
 	return `## MesDX Code Intelligence
 
 MesDX provides precise, local-first code navigation and analysis via the Model Context Protocol (MCP).
@@ -337,33 +278,6 @@ claude mcp add mesdx --transport stdio -- mesdx mcp --cwd <REPO_ROOT>
 Replace ` + "`<REPO_ROOT>`" + ` with the absolute path to this repository.
 
 
-### Available Tools
-
-**Navigation & Definition Lookup**
-- ` + "`mesdx.projectInfo`" + ` — Get repo root, source roots, and database path
-- ` + "`mesdx.goToDefinition`" + ` — Find symbol definitions by cursor position or name
-- ` + "`mesdx.findUsages`" + ` — Find all references to a symbol with dependency scoring
-
-**Impact Analysis**
-- ` + "`mesdx.dependencyGraph`" + ` — Analyze inbound/outbound dependencies for refactor risk assessment
-
-**Memory (Persistent Context)**
-- ` + "`mesdx.memoryAppend`" + ` — Create project or file-scoped markdown notes
-- ` + "`mesdx.memoryRead`" + ` — Read or list memory elements
-- ` + "`mesdx.memorySearch`" + ` — Full-text search across memories
-- ` + "`mesdx.memoryUpdate`" + ` — Update existing memories
-- ` + "`mesdx.memoryGrepReplace`" + ` — Regex find-and-replace in memories
-- ` + "`mesdx.memoryDelete`" + ` — Soft-delete memories
-
-### Workflow Skills
-
-For detailed step-by-step guidance on specific workflows, use MCP prompts:
-
-- ` + "`mesdx.skill.bugfix`" + ` — Navigate, analyze, and document bug fixes
-- ` + "`mesdx.skill.refactoring`" + ` — Safe refactoring with impact analysis
-- ` + "`mesdx.skill.feature_development`" + ` — Plan and implement new features
-- ` + "`mesdx.skill.security_analysis`" + ` — Find and document security issues
-
-**Supported languages:** Go, Java, Rust, Python, TypeScript, JavaScript
+` + mesdxToolsAndSkills() + `
 `
 }
