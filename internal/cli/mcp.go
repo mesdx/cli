@@ -321,7 +321,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 	// Register Find Usages tool
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "mesdx.findUsages",
-		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, context, and a dependencyScore (0-1) indicating confidence that the usage truly depends on the intended definition. Results are sorted by score (descending) while keeping adjacent usages grouped. The language parameter is required. For fetchCodeLinesAround: prefer 0 (or more) for better context; use -1 only when context is limited.",
+		Description: "Find all usage references of a symbol across the codebase. Provide either (filePath + line + column) for cursor-based lookup, or (symbolName) for name-based search. Returns reference locations with file path, line, column, context, and a dependencyScore (0-1) indicating coupling strength / refactoring risk: 1.0 = inheritance or instantiation (high risk), 0.6 = direct call, 0.25 = type annotation, 0.1 = casual mention. Scores are per-usage and do NOT compress near zero for high-usage symbols. Results are sorted by coupling score (descending) while keeping adjacent usages grouped. The language parameter is required. For fetchCodeLinesAround: prefer 0 (or more) for better context; use -1 only when context is limited.",
 		InputSchema: mustSchema(FindUsagesArgs{}),
 	}, func(ctx context.Context, req *mcp.CallToolRequest, args FindUsagesArgs) (*mcp.CallToolResult, any, error) {
 		// Validate language
@@ -420,18 +420,13 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
-		// Look up candidate definitions for scoring.
-		candidates, _ := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
+		// Score usages by coupling strength (not definition-resolution confidence).
+		// CoupleUsages assigns per-usage scores based on ref kind and lexical
+		// context, producing a wide [0,1] distribution even for symbols with
+		// hundreds of usages.
+		scored := indexer.CoupleUsages(results, repoRoot)
 
-		// If no primary def was set (name-based lookup), use the top candidate.
-		if primaryDef == nil && len(candidates) > 0 {
-			primaryDef = &candidates[0]
-		}
-
-		// Score usages against candidate definitions.
-		scored := indexer.ScoreUsages(results, candidates, primaryDef, repoRoot)
-
-		// Group adjacent usages and sort by score descending.
+		// Group adjacent usages and sort by coupling score descending.
 		scored = indexer.GroupAndSortUsages(scored, 3)
 
 		// Write scores back to UsageResult for formatting/output.
@@ -439,6 +434,12 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		for i, su := range scored {
 			scoredResults[i] = su.UsageResult
 			scoredResults[i].DependencyScore = su.DependencyScore
+		}
+
+		// Resolve candidates for structured output (used by dependencyGraph consumers).
+		candidates, _ := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
+		if primaryDef == nil && len(candidates) > 0 {
+			primaryDef = &candidates[0]
 		}
 
 		text := indexer.FormatScoredUsages(scored)
