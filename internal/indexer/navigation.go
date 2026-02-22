@@ -1,9 +1,13 @@
 package indexer
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/mesdx/cli/internal/symbols"
 )
@@ -42,6 +46,7 @@ type UsageResult struct {
 type Navigator struct {
 	DB        *sql.DB
 	ProjectID int64
+	RepoRoot  string
 }
 
 // GoToDefinitionByName finds symbol definitions matching the given name.
@@ -64,7 +69,7 @@ func (n *Navigator) GoToDefinitionByName(name string, filterFile string, lang st
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []DefinitionResult
+	results := []DefinitionResult{}
 	for rows.Next() {
 		var r DefinitionResult
 		var kindInt int
@@ -113,7 +118,7 @@ func (n *Navigator) FindUsagesByName(name string, filterFile string, lang string
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []UsageResult
+	results := []UsageResult{}
 	for rows.Next() {
 		var r UsageResult
 		var kindInt int
@@ -161,7 +166,7 @@ func (n *Navigator) RefsInFileRange(filePath string, startLine, endLine int, lan
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []UsageResult
+	results := []UsageResult{}
 	for rows.Next() {
 		var r UsageResult
 		var kindInt int
@@ -210,18 +215,62 @@ func (n *Navigator) identifierAt(filePath string, line, col int) (string, error)
 
 // identifierFromSource reads the source file and extracts the word at the position.
 func (n *Navigator) identifierFromSource(filePath string, line, col int) (string, error) {
-	// We need the absolute path. For now we'll look it up via the file record.
-	// The caller should pass repo-relative paths.
-	// If the file doesn't exist in the DB, return empty.
-	var _ string // placeholder
-	return extractWordAtPosition(filePath, line, col)
+	absPath := filePath
+	if !filepath.IsAbs(filePath) && n.RepoRoot != "" {
+		absPath = filepath.Join(n.RepoRoot, filePath)
+	}
+	return extractWordAtPosition(absPath, line, col)
 }
 
 // extractWordAtPosition reads a file and returns the identifier at line:col.
-func extractWordAtPosition(filePath string, line, col int) (string, error) {
-	// This would require the absolute path — the caller should resolve.
-	// For now this is a best-effort fallback.
+// line is 1-based, col is 0-based.
+func extractWordAtPosition(absPath string, line, col int) (string, error) {
+	if line < 1 || col < 0 {
+		return "", nil
+	}
+
+	f, err := os.Open(absPath)
+	if err != nil {
+		return "", nil
+	}
+	defer func() { _ = f.Close() }()
+
+	scanner := bufio.NewScanner(f)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		if lineNum == line {
+			text := scanner.Text()
+			return identifierAtCol(text, col), nil
+		}
+	}
 	return "", nil
+}
+
+// identifierAtCol extracts the identifier token surrounding position col (0-based)
+// in the given line of text. Returns "" if col is not on an identifier character.
+func identifierAtCol(text string, col int) string {
+	runes := []rune(text)
+	if col < 0 || col >= len(runes) {
+		return ""
+	}
+	if !isIdentRune(runes[col]) {
+		return ""
+	}
+
+	start := col
+	for start > 0 && isIdentRune(runes[start-1]) {
+		start--
+	}
+	end := col
+	for end < len(runes)-1 && isIdentRune(runes[end+1]) {
+		end++
+	}
+	return string(runes[start : end+1])
+}
+
+func isIdentRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 // FormatDefinitions formats definition results as a human-readable string for MCP.

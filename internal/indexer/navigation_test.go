@@ -26,7 +26,7 @@ func setupNavigationTest(t *testing.T) (*Navigator, *Indexer, func()) {
 		t.Fatalf("FullIndex: %v", err)
 	}
 
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID}
+	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
 	return nav, idx, func() { _ = d.Close() }
 }
 

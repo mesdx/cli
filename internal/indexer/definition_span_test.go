@@ -26,7 +26,7 @@ func setupSpanTest(t *testing.T) (*Navigator, func()) {
 		t.Fatalf("FullIndex: %v", err)
 	}
 
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID}
+	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
 	return nav, func() { _ = d.Close() }
 }
 

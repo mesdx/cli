@@ -166,6 +166,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 	nav := &indexer.Navigator{
 		DB:        d,
 		ProjectID: idx.Store.ProjectID,
+		RepoRoot:  repoRoot,
 	}
 
 	// Create memory manager (if memory dir is configured)

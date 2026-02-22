@@ -361,7 +361,7 @@ func setupDepScoreTest(t *testing.T) (*Navigator, string, func()) {
 		t.Fatalf("FullIndex: %v", err)
 	}
 
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID}
+	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
 	return nav, repoRoot, func() { _ = d.Close() }
 }
 
