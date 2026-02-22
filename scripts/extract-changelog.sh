@@ -2,11 +2,12 @@
 # Extracts the changelog section for a given version from CHANGELOG.md.
 # Usage: ./scripts/extract-changelog.sh <version>
 # Example: ./scripts/extract-changelog.sh v0.3.0
-#          ./scripts/extract-changelog.sh 0.3.0
+#          ./scripts/extract-changelog.sh v0.3.0-rc1  (uses [Unreleased] section)
 #
-# Exits with code 1 if no section is found for the given version, which
-# intentionally blocks the GitHub Actions release job when CHANGELOG.md
-# has not been updated before tagging.
+# For pre-release versions (tags containing 'rc' or 'test'), the [Unreleased]
+# section is used as the release body.
+# For stable versions, a matching '## [X.Y.Z]' section must exist or the
+# script exits with code 1, intentionally blocking the release job.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -23,16 +24,23 @@ if [[ ! -f "$CHANGELOG" ]]; then
   exit 1
 fi
 
+RAW_VERSION="$1"
 # Strip leading 'v' so both 'v0.3.0' and '0.3.0' work
-VERSION="${1#v}"
+VERSION="${RAW_VERSION#v}"
 
-# Extract lines between "## [VERSION]" (inclusive header skipped) and the next "## [" header.
-# The header line itself is skipped; only the body content is printed.
+# For pre-release tags (rc, test) use the [Unreleased] section
+if [[ "$RAW_VERSION" =~ (rc|test) ]]; then
+  LOOKUP="Unreleased"
+else
+  LOOKUP="$VERSION"
+fi
+
+# Extract lines between "## [LOOKUP]" (header skipped) and the next "## [" header.
 SECTION=$(awk \
-  -v ver="$VERSION" \
+  -v lookup="$LOOKUP" \
   'BEGIN { found=0 }
    /^## \[/ && found { exit }
-   /^## \[/ && $0 ~ "\\[" ver "\\]" { found=1; next }
+   /^## \[/ && $0 ~ "\\[" lookup "\\]" { found=1; next }
    found { print }' \
   "$CHANGELOG")
 
@@ -40,8 +48,13 @@ SECTION=$(awk \
 SECTION=$(echo "$SECTION" | sed -e '/./,$!d' -e 's/[[:space:]]*$//')
 
 if [[ -z "$SECTION" ]]; then
-  echo "ERROR: No changelog entry found for version '$VERSION' in CHANGELOG.md" >&2
-  echo "       Add a '## [$VERSION] - YYYY-MM-DD' section before tagging." >&2
+  if [[ "$LOOKUP" == "Unreleased" ]]; then
+    echo "ERROR: The [Unreleased] section in CHANGELOG.md is empty." >&2
+    echo "       Add notes to [Unreleased] before pushing a pre-release tag." >&2
+  else
+    echo "ERROR: No changelog entry found for version '$VERSION' in CHANGELOG.md" >&2
+    echo "       Add a '## [$VERSION] - YYYY-MM-DD' section before tagging." >&2
+  fi
   exit 1
 fi
 
