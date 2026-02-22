@@ -6,7 +6,7 @@
   [![Release](https://github.com/mesdx/cli/actions/workflows/release.yml/badge.svg)](https://github.com/mesdx/cli/actions/workflows/release.yml)
 </div>
 
-MesDX is a **local-first code intelligence MCP server** that indexes your repository and exposes reliable, structured navigation tools to agents like **Claude Code** (and other MCP clients). 🔍🧭
+MesDX is a **local-first code intelligence MCP server** that indexes your repository and exposes reliable, structured navigation tools to agents like **Claude Code**, **Cursor**, and **Antigravity** (and other MCP clients). 🔍🧭
 
 ## Why MesDX (MCP)?
 
@@ -101,6 +101,41 @@ claude mcp add mesdx --transport stdio -- mesdx mcp --cwd /path/to/your/workspac
 
 Restart Claude Code to load the MCP server.
 
+### 3. Add to Cursor (project-wide)
+
+Create or update `.cursor/mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "mesdx": {
+      "command": "mesdx",
+      "args": ["mcp", "--cwd", "/path/to/your/workspace"]
+    }
+  }
+}
+```
+
+Restart Cursor to load the MCP server. Running `mesdx init` will also create a Cursor Rule at `.cursor/rules/mesdx.mdc` with tool documentation.
+
+### 4. Add to Antigravity (project-wide)
+
+Create or update `.vscode/mcp.json` in your project root:
+
+```json
+{
+  "servers": {
+    "mesdx": {
+      "type": "stdio",
+      "command": "mesdx",
+      "args": ["mcp", "--cwd", "/path/to/your/workspace"]
+    }
+  }
+}
+```
+
+Running `mesdx init` will also create a project rule at `.agent/rules/mesdx.mdc` with tool documentation.
+
 ## Usage
 
 ### Initialize a Repository
@@ -114,6 +149,7 @@ This will:
 - **🗂️ Detect** the repository root and create `.mesdx/config.json` + a local DB in `.mesdx/`
 - **🔎 Index** the source directories you select (symbols + references)
 - **🧠 Create/index** a repo-relative markdown “memory” directory (default: `docs/mesdx-memory`)
+- **🤖 Auto-detect** your AI assistant (Claude Code, Cursor, Antigravity) and write MesDX guidance to the appropriate project context file
 
 ## Contributing
 
