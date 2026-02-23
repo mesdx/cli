@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-02-23
+## [0.4.1] - 2026-02-23
 ### Added
 - **Noise filtering for definitions and usages**: Go-to-definition and find-usages rank candidates by confidence and filter low-confidence noise (e.g. same-name variables or parameters), preferring the primary type or function definition in name-collision cases
 - **Coupling-strength scoring**: Usage sites are scored by coupling strength (e.g. inheritance and calls vs casual references); dependency graph and find-usages use these scores for impact and coupling metrics
