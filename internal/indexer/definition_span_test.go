@@ -1,33 +1,13 @@
 package indexer
 
 import (
-	"path/filepath"
 	"testing"
-
-	"github.com/mesdx/cli/internal/db"
 )
 
-// setupSpanTest creates a fully indexed test DB from testdata and returns a Navigator.
+// setupSpanTest returns the shared pre-indexed Navigator.
 func setupSpanTest(t *testing.T) (*Navigator, func()) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "span_test.db")
-	if err := db.Initialize(dbPath); err != nil {
-		t.Fatalf("db.Initialize: %v", err)
-	}
-	d, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-
-	repoRoot := testdataDir(t)
-	idx := New(d, repoRoot)
-
-	if _, err := idx.FullIndex([]string{"."}); err != nil {
-		t.Fatalf("FullIndex: %v", err)
-	}
-
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
-	return nav, func() { _ = d.Close() }
+	return sharedNav, func() {}
 }
 
 // ---------- Go span tests ----------

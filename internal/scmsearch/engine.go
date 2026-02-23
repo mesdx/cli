@@ -65,6 +65,11 @@ func (e *Engine) Search(ctx context.Context, req SearchRequest) (*SearchResult, 
 		return &SearchResult{Summary: Summary{DurationMs: int(time.Since(start).Milliseconds())}}, nil
 	}
 
+	// Use a derived context so we can cancel workers when MaxMatches is reached
+	// without cancelling the caller's context.
+	searchCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	type fileResult struct {
 		matches []Match
 		matched bool
@@ -85,14 +90,15 @@ func (e *Engine) Search(ctx context.Context, req SearchRequest) (*SearchResult, 
 			defer parser.Close()
 
 			for filePath := range work {
-				if ctx.Err() != nil {
+				if searchCtx.Err() != nil {
 					return
 				}
 				if req.MaxMatches > 0 && int(totalMatches.Load()) >= req.MaxMatches {
+					cancel()
 					return
 				}
 
-				m, err := e.searchFile(ctx, parser, filePath, req.Language, querySrc, req)
+				m, err := e.searchFile(searchCtx, parser, filePath, req.Language, querySrc, req)
 				if err != nil {
 					continue
 				}
@@ -107,11 +113,13 @@ func (e *Engine) Search(ctx context.Context, req SearchRequest) (*SearchResult, 
 	}
 
 	go func() {
+	loop:
 		for _, f := range files {
-			if ctx.Err() != nil {
-				break
+			select {
+			case work <- f:
+			case <-searchCtx.Done():
+				break loop
 			}
-			work <- f
 		}
 		close(work)
 		wg.Wait()

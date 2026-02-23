@@ -4,28 +4,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/mesdx/cli/internal/db"
 )
 
-// setupInboundTest creates an indexed Navigator for the inbound dependency graph tests.
+// setupInboundTest returns the shared pre-indexed Navigator.
 func setupInboundTest(t *testing.T) (*Navigator, string, func()) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "inbound.db")
-	if err := db.Initialize(dbPath); err != nil {
-		t.Fatalf("db.Initialize: %v", err)
-	}
-	d, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	repoRoot := testdataDir(t)
-	idx := New(d, repoRoot)
-	if _, err := idx.FullIndex([]string{"."}); err != nil {
-		t.Fatalf("FullIndex: %v", err)
-	}
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
-	return nav, repoRoot, func() { _ = d.Close() }
+	return sharedNav, sharedRepoRoot, func() {}
 }
 
 // nodeIDsInGraph returns a set of all node IDs across inbound nodes, outbound nodes, and the primary node.

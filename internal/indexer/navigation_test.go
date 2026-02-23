@@ -1,33 +1,12 @@
 package indexer
 
 import (
-	"path/filepath"
 	"testing"
-
-	"github.com/mesdx/cli/internal/db"
 )
 
 func setupNavigationTest(t *testing.T) (*Navigator, *Indexer, func()) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	if err := db.Initialize(dbPath); err != nil {
-		t.Fatalf("db.Initialize: %v", err)
-	}
-	d, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-
-	repoRoot := testdataDir(t)
-	idx := New(d, repoRoot)
-
-	// Full index the testdata
-	if _, err := idx.FullIndex([]string{"."}); err != nil {
-		t.Fatalf("FullIndex: %v", err)
-	}
-
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
-	return nav, idx, func() { _ = d.Close() }
+	return sharedNav, nil, func() {}
 }
 
 func TestGoToDefinitionByName(t *testing.T) {

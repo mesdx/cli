@@ -5,31 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/mesdx/cli/internal/db"
 )
 
-// setupCrossFileTest indexes testdata and returns a Navigator.
+// setupCrossFileTest returns the shared pre-indexed Navigator.
 func setupCrossFileTest(t *testing.T) (*Navigator, func()) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "crossfile.db")
-	if err := db.Initialize(dbPath); err != nil {
-		t.Fatalf("db.Initialize: %v", err)
-	}
-	d, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-
-	repoRoot := testdataDir(t)
-	idx := New(d, repoRoot)
-
-	if _, err := idx.FullIndex([]string{"."}); err != nil {
-		t.Fatalf("FullIndex: %v", err)
-	}
-
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
-	return nav, func() { _ = d.Close() }
+	return sharedNav, func() {}
 }
 
 // crossFileCase describes a single cross-file go-to-definition test.
@@ -341,23 +322,7 @@ func TestExtractWordAtPosition(t *testing.T) {
 // TestIdentifierAtFallback ensures that identifierAt falls through to
 // the source-file fallback when the DB has no matching ref/symbol at the cursor.
 func TestIdentifierAtFallback(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "fallback.db")
-	if err := db.Initialize(dbPath); err != nil {
-		t.Fatalf("db.Initialize: %v", err)
-	}
-	d, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-	defer func() { _ = d.Close() }()
-
-	repoRoot := testdataDir(t)
-	idx := New(d, repoRoot)
-	if _, err := idx.FullIndex([]string{"."}); err != nil {
-		t.Fatalf("FullIndex: %v", err)
-	}
-
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
+	nav := sharedNav
 
 	// Use a position on an identifier in an indexed file.
 	// Even if DB happens to miss this particular position, the fallback should find it.

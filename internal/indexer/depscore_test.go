@@ -2,10 +2,7 @@ package indexer
 
 import (
 	"math"
-	"path/filepath"
 	"testing"
-
-	"github.com/mesdx/cli/internal/db"
 )
 
 // ---------------------------------------------------------------------------
@@ -346,23 +343,7 @@ func TestSameDir(t *testing.T) {
 
 func setupDepScoreTest(t *testing.T) (*Navigator, string, func()) {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	if err := db.Initialize(dbPath); err != nil {
-		t.Fatalf("db.Initialize: %v", err)
-	}
-	d, err := db.Open(dbPath)
-	if err != nil {
-		t.Fatalf("db.Open: %v", err)
-	}
-
-	repoRoot := testdataDir(t)
-	idx := New(d, repoRoot)
-	if _, err := idx.FullIndex([]string{"."}); err != nil {
-		t.Fatalf("FullIndex: %v", err)
-	}
-
-	nav := &Navigator{DB: d, ProjectID: idx.Store.ProjectID, RepoRoot: repoRoot}
-	return nav, repoRoot, func() { _ = d.Close() }
+	return sharedNav, sharedRepoRoot, func() {}
 }
 
 func TestScoreUsages_GoFixture(t *testing.T) {
