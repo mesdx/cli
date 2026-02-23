@@ -295,6 +295,29 @@ func FormatDefinitions(results []DefinitionResult) string {
 	return b.String()
 }
 
+// FormatRankedDefinitions formats ranked definition results as a human-readable
+// string for MCP, including per-candidate confidence scores.
+func FormatRankedDefinitions(ranked []RankedDefinition) string {
+	if len(ranked) == 0 {
+		return "No definitions found."
+	}
+	var b strings.Builder
+	for i, r := range ranked {
+		if i > 0 {
+			b.WriteString("\n")
+		}
+		fmt.Fprintf(&b, "[%d] %s (%s) conf=%.2f", i+1, r.Name, r.Kind, r.Confidence)
+		if r.Container != "" {
+			fmt.Fprintf(&b, " in %s", r.Container)
+		}
+		fmt.Fprintf(&b, "\n    %s:%d:%d", r.Location.Path, r.Location.StartLine, r.Location.StartCol)
+		if r.Signature != "" {
+			fmt.Fprintf(&b, "\n    %s", r.Signature)
+		}
+	}
+	return b.String()
+}
+
 // FormatUsages formats usage results as a human-readable string for MCP.
 // If usages carry DependencyScore > 0, the score is printed under each entry.
 func FormatUsages(results []UsageResult) string {

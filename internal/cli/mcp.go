@@ -43,22 +43,26 @@ func validateLanguage(lang string) error {
 
 // GoToDefArgs is the input for the goToDefinition MCP tool.
 type GoToDefArgs struct {
-	FilePath     string `json:"filePath,omitempty"`
-	Line         int    `json:"line,omitempty"`
-	Column       int    `json:"column,omitempty"`
-	SymbolName   string `json:"symbolName,omitempty"`
-	Language     string `json:"language,omitempty"`
-	FetchTheCode *bool  `json:"fetchTheCode,omitempty"`
+	FilePath      string  `json:"filePath,omitempty"`
+	Line          int     `json:"line,omitempty"`
+	Column        int     `json:"column,omitempty"`
+	SymbolName    string  `json:"symbolName,omitempty"`
+	Language      string  `json:"language,omitempty"`
+	FetchTheCode  *bool   `json:"fetchTheCode,omitempty"`
+	MinConfidence float64 `json:"minConfidence,omitempty"`
+	IncludeNoise  bool    `json:"includeNoise,omitempty"`
 }
 
 // FindUsagesArgs is the input for the findUsages MCP tool.
 type FindUsagesArgs struct {
-	FilePath             string `json:"filePath,omitempty"`
-	Line                 int    `json:"line,omitempty"`
-	Column               int    `json:"column,omitempty"`
-	SymbolName           string `json:"symbolName,omitempty"`
-	Language             string `json:"language,omitempty"`
-	FetchCodeLinesAround int    `json:"fetchCodeLinesAround,omitempty"`
+	FilePath                string  `json:"filePath,omitempty"`
+	Line                    int     `json:"line,omitempty"`
+	Column                  int     `json:"column,omitempty"`
+	SymbolName              string  `json:"symbolName,omitempty"`
+	Language                string  `json:"language,omitempty"`
+	FetchCodeLinesAround    int     `json:"fetchCodeLinesAround,omitempty"`
+	MinResolutionConfidence float64 `json:"minResolutionConfidence,omitempty"`
+	IncludeNoise            bool    `json:"includeNoise,omitempty"`
 }
 
 // DependencyGraphArgs is the input for the dependencyGraph MCP tool.
@@ -256,15 +260,60 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
-		var results []indexer.DefinitionResult
-		var err error
+		noiseOpts := indexer.NoiseFilterOptions{
+			MinConfidence: args.MinConfidence,
+			IncludeNoise:  args.IncludeNoise,
+		}
 
 		if args.SymbolName != "" {
-			results, err = nav.GoToDefinitionByName(args.SymbolName, args.FilePath, args.Language)
+			// Name-based: retrieve all candidates then rank/filter.
+			rawDefs, err := nav.GoToDefinitionByName(args.SymbolName, args.FilePath, args.Language)
+			if err != nil {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+					},
+					IsError: true,
+				}, nil, nil
+			}
+
+			ranked := indexer.RankDefinitions(rawDefs, args.FilePath, noiseOpts)
+			if len(ranked) == 0 {
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("No definitions found for %q.", args.SymbolName)},
+					},
+				}, map[string]interface{}{"definitions": []indexer.RankedDefinition{}}, nil
+			}
+
+			text := indexer.FormatRankedDefinitions(ranked)
+			structuredContent := map[string]interface{}{
+				"definitions": ranked,
+			}
+
+			// Handle fetchTheCode (default true)
+			fetchTheCode := args.FetchTheCode == nil || *args.FetchTheCode
+			if fetchTheCode {
+				plainDefs := make([]indexer.DefinitionResult, len(ranked))
+				for i, rd := range ranked {
+					plainDefs[i] = rd.DefinitionResult
+				}
+				code, err := fetchDefinitionsCode(repoRoot, plainDefs)
+				if err != nil {
+					log.Printf("failed to fetch code for definitions: %v", err)
+				} else if code != "" {
+					structuredContent["code"] = code
+				}
+			}
+
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: text},
+				},
+			}, structuredContent, nil
 		} else if args.FilePath != "" && args.Line > 0 {
-			// Convert absolute path to repo-relative if needed
+			// Cursor-based: precise lookup, no noise filtering.
 			relPath := toRepoRelative(args.FilePath, repoRoot)
-			// Check if file's language matches requested language
 			detectedLang := indexer.DetectLang(relPath)
 			if string(detectedLang) != args.Language {
 				return &mcp.CallToolResult{
@@ -274,48 +323,44 @@ func runMcp(cmd *cobra.Command, args []string) error {
 					IsError: true,
 				}, nil, nil
 			}
-			results, err = nav.GoToDefinitionByPosition(relPath, args.Line, args.Column, args.Language)
-		} else {
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					&mcp.TextContent{
-						Text: "Error: provide either symbolName, or filePath + line + column",
-					},
-				},
-				IsError: true,
-			}, nil, nil
-		}
-
-		if err != nil {
-			return &mcp.CallToolResult{
-				Content: []mcp.Content{
-					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
-				},
-				IsError: true,
-			}, nil, nil
-		}
-
-		text := indexer.FormatDefinitions(results)
-		structuredContent := map[string]interface{}{
-			"definitions": results,
-		}
-
-		// Handle fetchTheCode (default true)
-		fetchTheCode := args.FetchTheCode == nil || *args.FetchTheCode
-		if fetchTheCode && len(results) > 0 {
-			code, err := fetchDefinitionsCode(repoRoot, results)
+			results, err := nav.GoToDefinitionByPosition(relPath, args.Line, args.Column, args.Language)
 			if err != nil {
-				log.Printf("failed to fetch code for definitions: %v", err)
-			} else if code != "" {
-				structuredContent["code"] = code
+				return &mcp.CallToolResult{
+					Content: []mcp.Content{
+						&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+					},
+					IsError: true,
+				}, nil, nil
 			}
+
+			text := indexer.FormatDefinitions(results)
+			structuredContent := map[string]interface{}{
+				"definitions": results,
+			}
+			fetchTheCode := args.FetchTheCode == nil || *args.FetchTheCode
+			if fetchTheCode && len(results) > 0 {
+				code, err := fetchDefinitionsCode(repoRoot, results)
+				if err != nil {
+					log.Printf("failed to fetch code for definitions: %v", err)
+				} else if code != "" {
+					structuredContent["code"] = code
+				}
+			}
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: text},
+				},
+			}, structuredContent, nil
 		}
 
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: text},
+				&mcp.TextContent{
+					Text: "Error: provide either symbolName, or filePath + line + column",
+				},
 			},
-		}, structuredContent, nil
+			IsError: true,
+		}, nil, nil
 	})
 
 	// Register Find Usages tool
@@ -334,27 +379,33 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
+		noiseOpts := indexer.NoiseFilterOptions{
+			MinConfidence: args.MinResolutionConfidence,
+			IncludeNoise:  args.IncludeNoise,
+		}
+
 		var results []indexer.UsageResult
 		var err error
 		var symbolName string
 		var filterFile string
 		var primaryDef *indexer.DefinitionResult
+		var rankedDefs []indexer.RankedDefinition
 
 		if args.SymbolName != "" {
 			symbolName = args.SymbolName
 			filterFile = args.FilePath
 
-			// Ambiguity check: name-based lookups must resolve to exactly one definition.
-			ambigCandidates, ambigErr := nav.GoToDefinitionByName(args.SymbolName, args.FilePath, args.Language)
-			if ambigErr != nil {
+			// Get all candidates, then rank/filter to pick a primary.
+			rawCandidates, rawErr := nav.GoToDefinitionByName(args.SymbolName, args.FilePath, args.Language)
+			if rawErr != nil {
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{
-						&mcp.TextContent{Text: fmt.Sprintf("Error: %v", ambigErr)},
+						&mcp.TextContent{Text: fmt.Sprintf("Error: %v", rawErr)},
 					},
 					IsError: true,
 				}, nil, nil
 			}
-			if len(ambigCandidates) == 0 {
+			if len(rawCandidates) == 0 {
 				return &mcp.CallToolResult{
 					Content: []mcp.Content{
 						&mcp.TextContent{Text: fmt.Sprintf("Error: no definitions found for %q", args.SymbolName)},
@@ -362,26 +413,17 @@ func runMcp(cmd *cobra.Command, args []string) error {
 					IsError: true,
 				}, nil, nil
 			}
-			if len(ambigCandidates) > 1 {
-				text := formatAmbiguousFindUsages(args.SymbolName, ambigCandidates)
-				return &mcp.CallToolResult{
-						Content: []mcp.Content{
-							&mcp.TextContent{Text: text},
-						},
-						IsError: true,
-					}, map[string]interface{}{
-						"ambiguous":            true,
-						"definitionCandidates": ambigCandidates,
-						"hint":                 "Supply a filePath filter or use cursor-based lookup (filePath + line + column) to disambiguate.",
-					}, nil
+
+			rankedDefs = indexer.RankDefinitions(rawCandidates, filterFile, noiseOpts)
+			if len(rankedDefs) == 0 {
+				rankedDefs = indexer.RankDefinitions(rawCandidates, filterFile, indexer.NoiseFilterOptions{IncludeNoise: true})
 			}
-			primaryDef = &ambigCandidates[0]
+			primaryDef = &rankedDefs[0].DefinitionResult
 
 			results, err = nav.FindUsagesByName(args.SymbolName, args.FilePath, args.Language)
 		} else if args.FilePath != "" && args.Line > 0 {
 			relPath := toRepoRelative(args.FilePath, repoRoot)
 			filterFile = relPath
-			// Check if file's language matches requested language
 			detectedLang := indexer.DetectLang(relPath)
 			if string(detectedLang) != args.Language {
 				return &mcp.CallToolResult{
@@ -392,7 +434,7 @@ func runMcp(cmd *cobra.Command, args []string) error {
 				}, nil, nil
 			}
 			results, err = nav.FindUsagesByPosition(relPath, args.Line, args.Column, args.Language)
-			// Resolve primary definition for cursor-based lookup.
+			// Cursor-based: precise lookup; resolve primary without noise filter.
 			if err == nil && len(results) > 0 {
 				symbolName = results[0].Name
 				defs, defErr := nav.GoToDefinitionByPosition(relPath, args.Line, args.Column, args.Language)
@@ -420,33 +462,69 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
-		// Score usages by coupling strength (not definition-resolution confidence).
-		// CoupleUsages assigns per-usage scores based on ref kind and lexical
-		// context, producing a wide [0,1] distribution even for symbols with
-		// hundreds of usages.
-		scored := indexer.CoupleUsages(results, repoRoot)
+		// Build the full candidate list (ranked for name-based, raw for cursor-based).
+		var candidateDefs []indexer.DefinitionResult
+		if rankedDefs != nil {
+			candidateDefs = make([]indexer.DefinitionResult, len(rankedDefs))
+			for i, rd := range rankedDefs {
+				candidateDefs[i] = rd.DefinitionResult
+			}
+		} else {
+			// Cursor-based: retrieve candidates for scoring context.
+			candidateDefs, _ = nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
+			if primaryDef == nil && len(candidateDefs) > 0 {
+				primaryDef = &candidateDefs[0]
+			}
+		}
+
+		// For name-based lookup: resolve and filter usages by definition identity.
+		// Usages that most likely refer to a *different* same-name symbol are removed.
+		var filteredResults []indexer.UsageResult
+		var resolutionMap map[string]float64
+		if rankedDefs != nil && primaryDef != nil && len(candidateDefs) > 0 {
+			resolved := indexer.ResolveAndFilterUsages(results, candidateDefs, primaryDef, repoRoot, noiseOpts)
+			filteredResults = make([]indexer.UsageResult, len(resolved))
+			resolutionMap = make(map[string]float64, len(resolved))
+			for i, ru := range resolved {
+				filteredResults[i] = ru.UsageResult
+				key := fmt.Sprintf("%s:%d:%d", ru.Location.Path, ru.Location.StartLine, ru.Location.StartCol)
+				resolutionMap[key] = ru.ResolutionConfidence
+			}
+		} else {
+			filteredResults = results
+		}
+
+		// Score filtered usages by coupling strength.
+		scored := indexer.CoupleUsages(filteredResults, repoRoot)
 
 		// Group adjacent usages and sort by coupling score descending.
 		scored = indexer.GroupAndSortUsages(scored, 3)
 
-		// Write scores back to UsageResult for formatting/output.
+		// Attach resolution confidence to each scored usage.
+		if resolutionMap != nil {
+			for i, su := range scored {
+				key := fmt.Sprintf("%s:%d:%d", su.Location.Path, su.Location.StartLine, su.Location.StartCol)
+				if rc, ok := resolutionMap[key]; ok {
+					scored[i].ResolutionConfidence = rc
+				}
+			}
+		}
+
+		// Write scores back to UsageResult for code-fetch / compat.
 		scoredResults := make([]indexer.UsageResult, len(scored))
 		for i, su := range scored {
 			scoredResults[i] = su.UsageResult
 			scoredResults[i].DependencyScore = su.DependencyScore
 		}
 
-		// Resolve candidates for structured output (used by dependencyGraph consumers).
-		candidates, _ := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
-		if primaryDef == nil && len(candidates) > 0 {
-			primaryDef = &candidates[0]
-		}
-
 		text := indexer.FormatScoredUsages(scored)
 		structuredContent := map[string]interface{}{
 			"usages":               scored,
 			"primaryDefinition":    primaryDef,
-			"definitionCandidates": candidates,
+			"definitionCandidates": candidateDefs,
+		}
+		if rankedDefs != nil {
+			structuredContent["rankedDefinitions"] = rankedDefs
 		}
 
 		// Handle fetchCodeLinesAround (default -1, clamped to [-1, 50])
@@ -531,8 +609,8 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
-		// Look up candidate definitions
-		candidates, err := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
+		// Look up candidate definitions and rank/filter for name-based lookups.
+		rawCandidates, err := nav.GoToDefinitionByName(symbolName, filterFile, args.Language)
 		if err != nil {
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{
@@ -542,8 +620,22 @@ func runMcp(cmd *cobra.Command, args []string) error {
 			}, nil, nil
 		}
 
-		if primaryDef == nil && len(candidates) > 0 {
-			primaryDef = &candidates[0]
+		var candidates []indexer.DefinitionResult
+		if primaryDef == nil {
+			// Name-based: rank to find primary.
+			ranked := indexer.RankDefinitions(rawCandidates, filterFile, indexer.NoiseFilterOptions{})
+			if len(ranked) == 0 {
+				ranked = indexer.RankDefinitions(rawCandidates, filterFile, indexer.NoiseFilterOptions{IncludeNoise: true})
+			}
+			candidates = make([]indexer.DefinitionResult, len(ranked))
+			for i, rd := range ranked {
+				candidates[i] = rd.DefinitionResult
+			}
+			if len(candidates) > 0 {
+				primaryDef = &candidates[0]
+			}
+		} else {
+			candidates = rawCandidates
 		}
 
 		// Apply defaults and caps
@@ -1179,17 +1271,4 @@ func startMemoryWatcher(ctx context.Context, mgr *memory.Manager) {
 			log.Printf("memory watcher error: %v", err)
 		}
 	}
-}
-
-// formatAmbiguousFindUsages formats an error message for ambiguous name-based findUsages.
-func formatAmbiguousFindUsages(symbolName string, candidates []indexer.DefinitionResult) string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "Error: ambiguous symbol %q — %d definition candidates found. Provide a filePath filter or use cursor-based lookup (filePath + line + column) to disambiguate.\n\n", symbolName, len(candidates))
-	for i, d := range candidates {
-		fmt.Fprintf(&b, "%d. %s (%s) at %s:%d\n", i+1, d.Name, d.Kind, d.Location.Path, d.Location.StartLine)
-		if d.Signature != "" {
-			fmt.Fprintf(&b, "   Signature: %s\n", d.Signature)
-		}
-	}
-	return b.String()
 }

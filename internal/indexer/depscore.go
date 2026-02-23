@@ -17,8 +17,9 @@ import (
 // ScoredUsage extends UsageResult with dependency scoring information.
 type ScoredUsage struct {
 	UsageResult
-	DependencyScore float64           `json:"dependencyScore"`
-	BestDefinition  *DefinitionResult `json:"bestDefinition,omitempty"`
+	DependencyScore      float64           `json:"dependencyScore"`
+	BestDefinition       *DefinitionResult `json:"bestDefinition,omitempty"`
+	ResolutionConfidence float64           `json:"resolutionConfidence,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
