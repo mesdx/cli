@@ -85,3 +85,13 @@
 ;; Attribute references
 (attribute
   attribute: (identifier) @ref.attribute)
+
+;; Quoted forward references in type annotations.
+;; Python allows strings as type annotations to break circular import cycles:
+;;   def foo() -> "MyClass": ...
+;;   def bar(x: "MyClass"): ...
+;;   def baz() -> tuple["MyClass", bool]: ...   (string inside generic)
+;; These string nodes are NOT identifiers, so (identifier) @ref.identifier
+;; misses them. We capture the enclosing (type) node and walk its subtree
+;; in the extractor to find all string literals inside.
+(type) @ref.annotation

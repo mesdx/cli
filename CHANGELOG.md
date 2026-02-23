@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Noise filtering for definitions and usages**: Go-to-definition and find-usages rank candidates by confidence and filter low-confidence noise (e.g. same-name variables or parameters), preferring the primary type or function definition in name-collision cases
+- **Coupling-strength scoring**: Usage sites are scored by coupling strength (e.g. inheritance and calls vs casual references); dependency graph and find-usages use these scores for impact and coupling metrics
+- **Richer dependency graph**: Inbound and outbound sections include per-edge coupling/impact scores, normalized scoring, and improved handling of transitive relationships for impact assessment
+- **Python string type annotations**: Type references inside Python string annotations (e.g. `def f() -> "MyClass"`, `x: "MyClass"`) are now indexed and resolved for go-to-definition and find-usages
+- **Deeper function and symbol navigation**: Improved resolution of definitions and usages across files and in complex name-collision scenarios
+- **Added scm search tool**: SCM search tool give agents ability to search codebase with treesitter SCM queries, this gives them higher hits when doing usage analysis.
+
+### Changed
+- **Dependency scoring**: Inbound and outbound weights are normalized to probabilities for more consistent impact and coupling scores across the dependency graph
+
 ## [0.3.1] - 2026-02-22
 ### Added
 - Added better support for cursor and antigravity.

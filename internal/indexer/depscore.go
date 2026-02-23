@@ -17,8 +17,9 @@ import (
 // ScoredUsage extends UsageResult with dependency scoring information.
 type ScoredUsage struct {
 	UsageResult
-	DependencyScore float64           `json:"dependencyScore"`
-	BestDefinition  *DefinitionResult `json:"bestDefinition,omitempty"`
+	DependencyScore      float64           `json:"dependencyScore"`
+	BestDefinition       *DefinitionResult `json:"bestDefinition,omitempty"`
+	ResolutionConfidence float64           `json:"resolutionConfidence,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -38,10 +39,10 @@ type DepGraphNode struct {
 }
 
 // DepGraphEdge represents a directed edge in the symbol dependency graph.
+// Edges in Inbound.Edges flow toward the primary symbol; edges in Outbound.Edges flow away from it.
 type DepGraphEdge struct {
 	From         string  `json:"from"`
 	To           string  `json:"to"`
-	Kind         string  `json:"kind"` // "inbound" or "outbound"
 	Score        float64 `json:"score"`
 	Count        int     `json:"count"`
 	FilePath     string  `json:"filePath,omitempty"`
@@ -59,19 +60,36 @@ type FileGraphEdge struct {
 	Count int     `json:"count"`
 }
 
-// SymbolGraph contains the symbol-level dependency graph.
-type SymbolGraph struct {
-	Nodes []DepGraphNode `json:"nodes"`
-	Edges []DepGraphEdge `json:"edges"`
+// DepGraphSection holds one directional slice of the dependency graph.
+// For Inbound: nodes are dependent file nodes, edges flow toward the primary symbol.
+// For Outbound: nodes are referenced symbol nodes, edges flow away from the primary symbol.
+type DepGraphSection struct {
+	Nodes      []DepGraphNode `json:"nodes"`
+	Edges      []DepGraphEdge `json:"edges"`
+	TotalFiles int            `json:"totalFiles"`
+	TotalUsages int           `json:"totalUsages,omitempty"` // inbound only: raw usage count
+	Score      float64        `json:"score"`
+}
+
+// DepGraphMetrics holds aggregate metrics for the full dependency graph.
+type DepGraphMetrics struct {
+	InboundEdgeCount  int     `json:"inboundEdgeCount"`
+	OutboundEdgeCount int     `json:"outboundEdgeCount"`
+	InboundUsageCount int     `json:"inboundUsageCount"`
+	ImpactScore       float64 `json:"impactScore"`   // avg score of inbound edges (how critical is this symbol)
+	CouplingScore     float64 `json:"couplingScore"` // avg score of outbound edges (how much does this depend on others)
 }
 
 // DependencyGraph is the full output of the dependency graph tool.
 type DependencyGraph struct {
 	PrimaryDefinition    *DefinitionResult  `json:"primaryDefinition"`
 	DefinitionCandidates []DefinitionResult `json:"definitionCandidates"`
-	SymbolGraph          SymbolGraph        `json:"symbolGraph"`
+	PrimaryNode          *DepGraphNode      `json:"primaryNode,omitempty"`
+	Inbound              DepGraphSection    `json:"inbound"`
+	Outbound             DepGraphSection    `json:"outbound"`
 	FileGraph            []FileGraphEdge    `json:"fileGraph"`
 	Usages               []ScoredUsage      `json:"usages,omitempty"`
+	Metrics              DepGraphMetrics    `json:"metrics"`
 }
 
 // ---------------------------------------------------------------------------
@@ -472,11 +490,9 @@ func BuildDependencyGraph(
 	graph := &DependencyGraph{
 		PrimaryDefinition:    primaryDef,
 		DefinitionCandidates: candidates,
-		SymbolGraph: SymbolGraph{
-			Nodes: []DepGraphNode{},
-			Edges: []DepGraphEdge{},
-		},
-		FileGraph: []FileGraphEdge{},
+		Inbound:              DepGraphSection{Nodes: []DepGraphNode{}, Edges: []DepGraphEdge{}},
+		Outbound:             DepGraphSection{Nodes: []DepGraphNode{}, Edges: []DepGraphEdge{}},
+		FileGraph:            []FileGraphEdge{},
 	}
 
 	if primaryDef == nil {
@@ -485,7 +501,7 @@ func BuildDependencyGraph(
 
 	// Add primary definition as a node.
 	primaryNodeID := nodeID(primaryDef.Location.Path, primaryDef.Name, primaryDef.Location.StartLine)
-	graph.SymbolGraph.Nodes = append(graph.SymbolGraph.Nodes, DepGraphNode{
+	primaryNode := DepGraphNode{
 		ID:        primaryNodeID,
 		Name:      primaryDef.Name,
 		Kind:      primaryDef.Kind,
@@ -494,7 +510,8 @@ func BuildDependencyGraph(
 		EndLine:   primaryDef.Location.EndLine,
 		Container: primaryDef.Container,
 		Signature: primaryDef.Signature,
-	})
+	}
+	graph.PrimaryNode = &primaryNode
 
 	// -----------------------------------------------------------------------
 	// Inbound edges: usages of this symbol → primaryDef
@@ -517,13 +534,31 @@ func BuildDependencyGraph(
 			filtered = append(filtered, su)
 		}
 	}
+
+	// Never-empty safeguard: if minScore filtered out all usages but scored usages exist,
+	// fall back to the top-scored usage per unique file so inbound is never silently empty.
+	if len(filtered) == 0 && len(scored) > 0 {
+		topByFile := map[string]ScoredUsage{}
+		for _, su := range scored {
+			if ex, ok := topByFile[su.Location.Path]; !ok || su.DependencyScore > ex.DependencyScore {
+				topByFile[su.Location.Path] = su
+			}
+		}
+		filtered = make([]ScoredUsage, 0, len(topByFile))
+		for _, su := range topByFile {
+			filtered = append(filtered, su)
+		}
+		sort.Slice(filtered, func(i, j int) bool {
+			return filtered[i].DependencyScore > filtered[j].DependencyScore
+		})
+	}
 	graph.Usages = filtered
 
 	// Aggregate inbound edges per file.
-	inbound := map[string]*DepGraphEdge{}
+	inboundByFile := map[string]*DepGraphEdge{}
 	for _, su := range filtered {
 		key := su.Location.Path
-		if e, ok := inbound[key]; ok {
+		if e, ok := inboundByFile[key]; ok {
 			e.Count++
 			if su.DependencyScore > e.Score {
 				e.Score = su.DependencyScore
@@ -534,10 +569,9 @@ func BuildDependencyGraph(
 				e.TargetType = su.TargetType
 			}
 		} else {
-			inbound[key] = &DepGraphEdge{
+			inboundByFile[key] = &DepGraphEdge{
 				From:         su.Location.Path,
 				To:           primaryNodeID,
-				Kind:         "inbound",
 				Score:        su.DependencyScore,
 				Count:        1,
 				FilePath:     su.Location.Path,
@@ -548,9 +582,16 @@ func BuildDependencyGraph(
 			}
 		}
 	}
-	for _, e := range inbound {
+	for _, e := range inboundByFile {
 		e.Score = round4(e.Score)
-		graph.SymbolGraph.Edges = append(graph.SymbolGraph.Edges, *e)
+		graph.Inbound.Edges = append(graph.Inbound.Edges, *e)
+		// File node for each inbound source so consumers can render the full graph.
+		graph.Inbound.Nodes = append(graph.Inbound.Nodes, DepGraphNode{
+			ID:   e.FilePath,
+			Name: e.FilePath,
+			Kind: "file",
+			Path: e.FilePath,
+		})
 	}
 
 	// -----------------------------------------------------------------------
@@ -559,15 +600,55 @@ func BuildDependencyGraph(
 	if maxDepth >= 1 {
 		outbound, err := computeOutbound(nav, primaryDef, primaryNodeID, lang, repoRoot)
 		if err == nil {
-			graph.SymbolGraph.Nodes = append(graph.SymbolGraph.Nodes, outbound.nodes...)
-			graph.SymbolGraph.Edges = append(graph.SymbolGraph.Edges, outbound.edges...)
+			graph.Outbound.Nodes = append(graph.Outbound.Nodes, outbound.nodes...)
+			graph.Outbound.Edges = append(graph.Outbound.Edges, outbound.edges...)
 		}
 	}
 
 	// -----------------------------------------------------------------------
 	// Collapse to file graph
 	// -----------------------------------------------------------------------
-	graph.FileGraph = collapseToFileGraph(primaryDef.Location.Path, graph.SymbolGraph.Edges)
+	graph.FileGraph = collapseToFileGraph(primaryDef.Location.Path, graph.Inbound.Edges, graph.Outbound.Edges)
+
+	// -----------------------------------------------------------------------
+	// Directional summaries
+	// -----------------------------------------------------------------------
+	inFileSet := map[string]bool{}
+	var inScoreSum float64
+	for _, e := range graph.Inbound.Edges {
+		inFileSet[e.FilePath] = true
+		inScoreSum += e.Score
+	}
+	inAvgScore := 0.0
+	if len(graph.Inbound.Edges) > 0 {
+		inAvgScore = round4(inScoreSum / float64(len(graph.Inbound.Edges)))
+	}
+
+	outFileSet := map[string]bool{}
+	var outScoreSum float64
+	for _, e := range graph.Outbound.Edges {
+		outFileSet[e.FilePath] = true
+		outScoreSum += e.Score
+	}
+	outAvgScore := 0.0
+	if len(graph.Outbound.Edges) > 0 {
+		outAvgScore = round4(outScoreSum / float64(len(graph.Outbound.Edges)))
+	}
+
+	graph.Inbound.TotalFiles = len(inFileSet)
+	graph.Inbound.TotalUsages = len(graph.Usages)
+	graph.Inbound.Score = inAvgScore
+
+	graph.Outbound.TotalFiles = len(outFileSet)
+	graph.Outbound.Score = outAvgScore
+
+	graph.Metrics = DepGraphMetrics{
+		InboundEdgeCount:  len(graph.Inbound.Edges),
+		OutboundEdgeCount: len(graph.Outbound.Edges),
+		InboundUsageCount: len(graph.Usages),
+		ImpactScore:       inAvgScore,
+		CouplingScore:     outAvgScore,
+	}
 
 	return graph, nil
 }
@@ -653,7 +734,6 @@ func computeOutbound(
 		edge := DepGraphEdge{
 			From:     defNodeID,
 			To:       targetNodeID,
-			Kind:     "outbound",
 			Score:    1.0 / math.Sqrt(float64(len(defs))), // uniqueness-based score
 			Count:    count,
 			FilePath: best.Location.Path,
@@ -711,40 +791,31 @@ func pickBestCandidate(defs []DefinitionResult, contextFile string) *DefinitionR
 	return &defs[0]
 }
 
-// collapseToFileGraph derives file-level edges from symbol-level edges.
-func collapseToFileGraph(primaryFile string, edges []DepGraphEdge) []FileGraphEdge {
+// collapseToFileGraph derives file-level edges from inbound and outbound symbol edges.
+func collapseToFileGraph(primaryFile string, inEdges, outEdges []DepGraphEdge) []FileGraphEdge {
 	type fileEdgeKey struct{ from, to string }
 	agg := map[fileEdgeKey]*FileGraphEdge{}
 
-	for _, e := range edges {
-		var from, to string
-		switch e.Kind {
-		case "inbound":
-			from = e.FilePath
-			to = primaryFile
-		case "outbound":
-			from = primaryFile
-			to = e.FilePath
-		default:
-			continue
-		}
+	upsert := func(from, to string, score float64, count int) {
 		if from == to {
-			continue // skip self-edges
+			return
 		}
 		key := fileEdgeKey{from, to}
 		if fe, ok := agg[key]; ok {
-			fe.Count += e.Count
-			if e.Score > fe.Score {
-				fe.Score = e.Score
+			fe.Count += count
+			if score > fe.Score {
+				fe.Score = score
 			}
 		} else {
-			agg[key] = &FileGraphEdge{
-				From:  from,
-				To:    to,
-				Score: e.Score,
-				Count: e.Count,
-			}
+			agg[key] = &FileGraphEdge{From: from, To: to, Score: score, Count: count}
 		}
+	}
+
+	for _, e := range inEdges {
+		upsert(e.FilePath, primaryFile, e.Score, e.Count)
+	}
+	for _, e := range outEdges {
+		upsert(primaryFile, e.FilePath, e.Score, e.Count)
 	}
 
 	result := make([]FileGraphEdge, 0, len(agg))
