@@ -62,6 +62,7 @@ func TestSkillPrompts(t *testing.T) {
 			"mesdx.skill.refactoring",
 			"mesdx.skill.feature_development",
 			"mesdx.skill.security_analysis",
+			"mesdx.skill.scm_search",
 		}
 
 		if len(prompts) != len(expectedPrompts) {
@@ -88,6 +89,7 @@ func TestSkillPrompts(t *testing.T) {
 		{"mesdx.skill.refactoring"},
 		{"mesdx.skill.feature_development"},
 		{"mesdx.skill.security_analysis"},
+		{"mesdx.skill.scm_search"},
 	}
 
 	for _, tt := range tests {

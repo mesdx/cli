@@ -189,6 +189,9 @@ func mesdxToolsAndSkills() string {
 **Impact Analysis**
 - ` + bt("mesdx.dependencyGraph") + ` — Analyze inbound/outbound dependencies for refactor risk assessment
 
+**Code Search (Tree-sitter)**
+- ` + bt("mesdx.scmSearch") + ` — Run Tree-sitter S-expression queries in parallel across source files (raw query or predefined stubs)
+
 **Memory (Persistent Context)**
 - ` + bt("mesdx.memoryAppend") + ` — Create project or file-scoped markdown notes
 - ` + bt("mesdx.memoryRead") + ` — Read or list memory elements
@@ -205,6 +208,7 @@ For detailed step-by-step guidance on specific workflows, use MCP prompts:
 - ` + bt("mesdx.skill.refactoring") + ` — Safe refactoring with impact analysis
 - ` + bt("mesdx.skill.feature_development") + ` — Plan and implement new features
 - ` + bt("mesdx.skill.security_analysis") + ` — Find and document security issues
+- ` + bt("mesdx.skill.scm_search") + ` — Write and use Tree-sitter SCM queries for structural code search
 
 **Supported languages:** Go, Java, Rust, Python, TypeScript, JavaScript`
 }

@@ -39,6 +39,14 @@ func registerSkillPrompts(server *mcp.Server, repoRoot string, memEnabled bool) 
 	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		return securityAnalysisPromptHandler(req, memEnabled)
 	})
+
+	// SCM Search skill
+	server.AddPrompt(&mcp.Prompt{
+		Name:        "mesdx.skill.scm_search",
+		Description: "Write and use Tree-sitter SCM queries to search code structurally with mesdx.scmSearch",
+	}, func(ctx context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+		return scmSearchPromptHandler(req)
+	})
 }
 
 func bugfixPromptHandler(req *mcp.GetPromptRequest, memEnabled bool) (*mcp.GetPromptResult, error) {
@@ -347,6 +355,103 @@ Use ` + "`mesdx.goToDefinition`" + ` by symbolName to locate these functions.
 
 	return &mcp.GetPromptResult{
 		Description: "Security analysis workflow using MesDX graph tools and structured memory notes",
+		Messages: []*mcp.PromptMessage{
+			{
+				Role: "user",
+				Content: &mcp.TextContent{
+					Text: content,
+				},
+			},
+		},
+	}, nil
+}
+
+func scmSearchPromptHandler(req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
+	content := `# Structural Code Search with Tree-sitter (mesdx.scmSearch)
+
+Search your codebase by AST structure, not just text. This tool runs Tree-sitter
+S-expression queries in parallel across all source files.
+
+## Quick Start: Use a Stub
+
+Stubs are predefined, per-language query templates. Just supply a name and arguments.
+
+| Stub ID | Args | Description |
+|---------|------|-------------|
+| ` + "`defs.function.named`" + ` | {name} | Find function definitions by name |
+| ` + "`defs.class.named`" + ` | {name} | Find class/struct definitions by name |
+| ` + "`defs.interface.named`" + ` | {name} | Find interface/trait definitions by name |
+| ` + "`defs.method.named`" + ` | {name} | Find method definitions by name |
+| ` + "`refs.type.named`" + ` | {name} | Find type references by name |
+| ` + "`refs.call.named`" + ` | {name} | Find call sites of a function by name |
+| ` + "`refs.write.named`" + ` | {name} | Find assignment sites for a variable by name |
+| ` + "`refs.import.named`" + ` | {name} | Find import statements referencing a name |
+
+**Example** — Find all definitions of ` + "`NewPerson`" + `:
+` + "```" + `
+mesdx.scmSearch(language="go", stubName="defs.function.named", stubArgs={"name": "NewPerson"})
+` + "```" + `
+
+## Writing Raw SCM Queries
+
+Tree-sitter queries use S-expressions (Lisp-like) to match AST node patterns.
+Each parenthesized form matches a node type; ` + "`name:`" + ` matches a named child field.
+Prefix a node with ` + "`@captureName`" + ` to capture it in results.
+
+### Syntax Cheat Sheet
+
+` + "```scheme" + `
+;; Match any function declaration, capture its name
+(function_declaration name: (identifier) @fn)
+
+;; Match calls where the callee is literally "foo"
+(call_expression
+  function: (identifier) @call
+  (#eq? @call "foo"))
+
+;; Match class names starting with "Base"
+(class_declaration
+  name: (type_identifier) @cls
+  (#match? @cls "^Base"))
+
+;; Match any of several values
+(identifier) @id (#any-of? @id "read" "write" "close")
+` + "```" + `
+
+### Predicates
+
+- **` + "`#eq?`" + `** ` + "`@capture \"literal\"`" + ` — exact string match
+- **` + "`#match?`" + `** ` + "`@capture \"regex\"`" + ` — regex match (Rust regex syntax)
+- **` + "`#any-of?`" + `** ` + "`@capture \"a\" \"b\" \"c\"`" + ` — match any of the listed values
+
+### Common Node Types by Language
+
+**Go**: ` + "`function_declaration`" + `, ` + "`method_declaration`" + `, ` + "`type_declaration`" + `, ` + "`type_spec`" + `, ` + "`struct_type`" + `, ` + "`interface_type`" + `, ` + "`call_expression`" + `, ` + "`identifier`" + `, ` + "`type_identifier`" + `, ` + "`field_identifier`" + `
+**TypeScript**: ` + "`function_declaration`" + `, ` + "`class_declaration`" + `, ` + "`interface_declaration`" + `, ` + "`method_definition`" + `, ` + "`call_expression`" + `, ` + "`identifier`" + `, ` + "`type_identifier`" + `, ` + "`property_identifier`" + `
+**Python**: ` + "`function_definition`" + `, ` + "`class_definition`" + `, ` + "`call`" + `, ` + "`assignment`" + `, ` + "`identifier`" + `, ` + "`attribute`" + `, ` + "`decorator`" + `
+**Java**: ` + "`class_declaration`" + `, ` + "`method_declaration`" + `, ` + "`method_invocation`" + `, ` + "`interface_declaration`" + `, ` + "`identifier`" + `, ` + "`type_identifier`" + `
+**Rust**: ` + "`function_item`" + `, ` + "`struct_item`" + `, ` + "`enum_item`" + `, ` + "`trait_item`" + `, ` + "`impl_item`" + `, ` + "`call_expression`" + `, ` + "`identifier`" + `, ` + "`type_identifier`" + `
+
+### Tips
+
+1. **Start broad, then restrict.** Begin with just a node type (e.g. ` + "`(function_declaration)`" + `), then add field constraints and predicates.
+2. **Use ` + "`includeGlobs`" + `** to limit scope (e.g. ` + "`[\"*.go\"]`" + ` or ` + "`[\"src/api/*.ts\"]`" + `).
+3. **Capture multiple things** in one query by adding more ` + "`@capture`" + ` names.
+4. **Check ` + "`astParents`" + `** in results to understand nesting context.
+5. **Combine with ` + "`mesdx.goToDefinition`" + `** or ` + "`mesdx.findUsages`" + `** for deeper analysis after identifying locations.
+
+## Output
+
+Each match includes:
+- File path, line/column range
+- Capture name and AST node type
+- Matched text snippet
+- Source line with surrounding context (configurable via ` + "`contextLines`" + `)
+- AST parent chain (configurable depth via ` + "`astParentDepth`" + `)
+`
+
+	return &mcp.GetPromptResult{
+		Description: "Guide for writing and using Tree-sitter SCM queries with mesdx.scmSearch",
 		Messages: []*mcp.PromptMessage{
 			{
 				Role: "user",

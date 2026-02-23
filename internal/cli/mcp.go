@@ -18,6 +18,7 @@ import (
 	"github.com/mesdx/cli/internal/mcpstate"
 	"github.com/mesdx/cli/internal/memory"
 	"github.com/mesdx/cli/internal/repo"
+	"github.com/mesdx/cli/internal/scmsearch"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/spf13/cobra"
 )
@@ -75,6 +76,21 @@ type DependencyGraphArgs struct {
 	MaxDepth   int     `json:"maxDepth,omitempty"`
 	MinScore   float64 `json:"minScore,omitempty"`
 	MaxUsages  int     `json:"maxUsages,omitempty"`
+}
+
+// ScmSearchArgs is the input for the scmSearch MCP tool.
+type ScmSearchArgs struct {
+	Language           string            `json:"language"`
+	Query              string            `json:"query,omitempty"`
+	StubName           string            `json:"stubName,omitempty"`
+	StubArgs           map[string]string `json:"stubArgs,omitempty"`
+	IncludeGlobs       []string          `json:"includeGlobs,omitempty"`
+	ExcludeGlobs       []string          `json:"excludeGlobs,omitempty"`
+	ContextLines       int               `json:"contextLines,omitempty"`
+	MaxMatches         int               `json:"maxMatches,omitempty"`
+	MaxMatchesPerFile  int               `json:"maxMatchesPerFile,omitempty"`
+	ASTParentDepth     int               `json:"astParentDepth,omitempty"`
+	NodeTextLimitBytes int               `json:"nodeTextLimitBytes,omitempty"`
 }
 
 func newMcpCmd() *cobra.Command {
@@ -679,6 +695,84 @@ func runMcp(cmd *cobra.Command, args []string) error {
 		}, graph, nil
 	})
 
+	// Register SCM Search tool
+	scmCache := scmsearch.NewQueryCache(64)
+	defer scmCache.Close()
+
+	scmEngine := scmsearch.NewEngine(repoRoot, cfg.SourceRoots, scmCache)
+
+	mcp.AddTool(server, &mcp.Tool{
+		Name: "mesdx.scmSearch",
+		Description: `Run a Tree-sitter S-expression (SCM) query against source files in parallel.
+
+**Two modes:**
+1. Provide a raw ` + "`query`" + ` (Tree-sitter S-expression).
+2. Pick a predefined ` + "`stubName`" + ` with ` + "`stubArgs`" + `.
+
+**Available stubs:**
+- ` + "`defs.function.named`" + ` {name} — Find function definitions by name
+- ` + "`defs.class.named`" + ` {name} — Find class/struct definitions by name
+- ` + "`defs.interface.named`" + ` {name} — Find interface/trait definitions by name
+- ` + "`defs.method.named`" + ` {name} — Find method definitions by name
+- ` + "`refs.type.named`" + ` {name} — Find type references by name
+- ` + "`refs.call.named`" + ` {name} — Find call sites of a function by name
+- ` + "`refs.write.named`" + ` {name} — Find assignment sites for a variable by name
+- ` + "`refs.import.named`" + ` {name} — Find import statements referencing a name
+
+**Writing raw SCM queries:**
+Tree-sitter queries use S-expressions to match AST patterns. Captures are prefixed with @.
+Examples:
+  (function_declaration name: (identifier) @fn)                  — all function defs
+  (call_expression function: (identifier) @call (#eq? @call "foo"))  — calls to "foo"
+  (class_declaration name: (type_identifier) @cls (#match? @cls "^Base"))  — classes starting with "Base"
+
+**Predicates:** #eq? (exact match), #match? (regex), #any-of? (one of several values)
+
+Returns matches with file path, line/column, capture name, node type, source context, and AST parent chain.
+The language parameter is required.`,
+		InputSchema: mustSchema(ScmSearchArgs{}),
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args ScmSearchArgs) (*mcp.CallToolResult, any, error) {
+		if err := validateLanguage(args.Language); err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
+		searchReq := scmsearch.SearchRequest{
+			Language:           args.Language,
+			Query:              args.Query,
+			StubName:           args.StubName,
+			StubArgs:           args.StubArgs,
+			IncludeGlobs:       args.IncludeGlobs,
+			ExcludeGlobs:       args.ExcludeGlobs,
+			ContextLines:       args.ContextLines,
+			MaxMatches:         args.MaxMatches,
+			MaxMatchesPerFile:  args.MaxMatchesPerFile,
+			ASTParentDepth:     args.ASTParentDepth,
+			NodeTextLimitBytes: args.NodeTextLimitBytes,
+		}
+
+		result, err := scmEngine.Search(ctx, searchReq)
+		if err != nil {
+			return &mcp.CallToolResult{
+				Content: []mcp.Content{
+					&mcp.TextContent{Text: fmt.Sprintf("Error: %v", err)},
+				},
+				IsError: true,
+			}, nil, nil
+		}
+
+		text := scmsearch.FormatResults(result)
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: text},
+			},
+		}, result, nil
+	})
+
 	// Register memory tools (if memory dir is configured)
 	if memMgr != nil {
 		registerMemoryTools(server, memMgr)
@@ -1190,6 +1284,58 @@ func buildSchema(v interface{}) map[string]interface{} {
 			"default":     500,
 			"minimum":     1,
 			"maximum":     5000,
+		}
+	case ScmSearchArgs:
+		props["language"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Programming language (required): go, java, rust, python, typescript, javascript",
+		}
+		props["query"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Raw Tree-sitter S-expression query. Mutually exclusive with stubName.",
+		}
+		props["stubName"] = map[string]interface{}{
+			"type":        "string",
+			"description": "Predefined query stub ID (e.g. defs.function.named). Mutually exclusive with query.",
+		}
+		props["stubArgs"] = map[string]interface{}{
+			"type":        "object",
+			"description": "Arguments for the stub template (e.g. {\"name\": \"MyFunc\"}).",
+		}
+		props["includeGlobs"] = map[string]interface{}{
+			"type":        "array",
+			"items":       map[string]interface{}{"type": "string"},
+			"description": "Glob patterns to include (relative to repo root or basename).",
+		}
+		props["excludeGlobs"] = map[string]interface{}{
+			"type":        "array",
+			"items":       map[string]interface{}{"type": "string"},
+			"description": "Glob patterns to exclude.",
+		}
+		props["contextLines"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Lines of source context before and after each match (default: 2).",
+			"default":     2,
+		}
+		props["maxMatches"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Maximum total matches to return (default: 500).",
+			"default":     500,
+		}
+		props["maxMatchesPerFile"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Maximum matches per file (default: 100).",
+			"default":     100,
+		}
+		props["astParentDepth"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Number of AST parent node types to include (default: 3).",
+			"default":     3,
+		}
+		props["nodeTextLimitBytes"] = map[string]interface{}{
+			"type":        "integer",
+			"description": "Max bytes of node text to include per match (default: 512).",
+			"default":     512,
 		}
 	}
 

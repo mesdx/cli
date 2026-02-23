@@ -261,10 +261,12 @@ func TestMesdxToolsAndSkills(t *testing.T) {
 		"mesdx.memoryUpdate",
 		"mesdx.memoryGrepReplace",
 		"mesdx.memoryDelete",
+		"mesdx.scmSearch",
 		"mesdx.skill.bugfix",
 		"mesdx.skill.refactoring",
 		"mesdx.skill.feature_development",
 		"mesdx.skill.security_analysis",
+		"mesdx.skill.scm_search",
 	}
 	for _, r := range required {
 		if !strings.Contains(content, r) {
