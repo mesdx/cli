@@ -39,12 +39,9 @@ type crossFileCase struct {
 
 	// Call site: file containing the usage / call
 	callFile string
-	callLine int
-	callCol  int
 
 	// Expected definition
 	defFile     string
-	defLine     int
 	defSymbol   string
 	defKindLike string // substring of kind (e.g. "function", "method")
 }

@@ -233,6 +233,41 @@ func (e *Extractor) Extract(filename string, source []byte) (*symbols.FileResult
 			continue
 		}
 
+		// Check whether this capture should be expanded into multiple derived refs.
+		// Currently handles Python type-annotation nodes that contain string
+		// literals (quoted forward references and generic type parameters).
+		if expanded, wasExpanded := expandCapture(e.langName, rc.capName, node, source); wasExpanded {
+			for _, er := range expanded {
+				if er.Name == "" || len(er.Name) <= 1 || isCommonKeyword(er.Name) {
+					continue
+				}
+				erKey := fmt.Sprintf("%s:%d:%d", er.Name, er.Row, er.Col)
+				if defPositions[erKey] {
+					continue
+				}
+				isBuiltin := IsBuiltin(e.langName, er.Name)
+				isExternal := !isBuiltin && importNames[er.Name]
+				if existing, seen := seenRefs[erKey]; seen {
+					if refSemanticPriority(er.Kind, er.Relation) <= refSemanticPriority(existing.Kind, existing.Relation) {
+						continue
+					}
+				}
+				seenRefs[erKey] = symbols.Ref{
+					Name:             er.Name,
+					Kind:             er.Kind,
+					IsExternal:       isExternal,
+					IsBuiltin:        isBuiltin,
+					Relation:         er.Relation,
+					StartLine:        int(er.Row) + 1,
+					StartCol:         int(er.Col),
+					EndLine:          int(er.EndRow) + 1,
+					EndCol:           int(er.EndCol),
+					ContextContainer: rc.containerName,
+				}
+			}
+			continue
+		}
+
 		name := node.Content(source)
 		if name == "" || len(name) <= 1 || isCommonKeyword(name) {
 			continue

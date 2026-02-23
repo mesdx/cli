@@ -181,3 +181,125 @@ function sayHello(): void {
 		t.Error("Expected to find Person class")
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Python type-annotation coverage tests
+// ---------------------------------------------------------------------------
+
+// TestPythonQuotedForwardRef verifies that identifiers inside Python quoted
+// type annotations (forward references) are emitted as annotation refs.
+func TestPythonQuotedForwardRef(t *testing.T) {
+	if err := VerifyLanguages([]string{"python"}); err != nil {
+		t.Skip("Python parser not available:", err)
+	}
+
+	extractor, err := NewExtractor("python")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer extractor.Close()
+
+	source := []byte(`from typing import List, Optional
+
+class DataModel:
+    pass
+
+# Pattern 1: plain quoted return type
+def get_one() -> "DataModel":
+    return DataModel()
+
+# Pattern 2: quoted element inside generic
+def get_list() -> List["DataModel"]:
+    return []
+
+# Pattern 3: quoted tuple element
+def get_pair() -> tuple["DataModel", bool]:
+    return (DataModel(), True)
+
+# Pattern 4: parameter is a quoted type
+def accept(m: "DataModel") -> bool:
+    return True
+
+# Pattern 5: entire complex type is quoted
+def get_nested() -> "Optional[DataModel]":
+    return DataModel()
+
+# Negative: string NOT in annotation position — must NOT produce a ref
+description = "DataModel is a class"
+`)
+
+	result, err := extractor.Extract("test.py", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify DataModel appears as a ref (from the quoted annotations).
+	foundAnnotationRef := false
+	for _, r := range result.Refs {
+		if r.Name == "DataModel" && r.Kind == RefAnnotation {
+			foundAnnotationRef = true
+		}
+	}
+	if !foundAnnotationRef {
+		t.Error("expected at least one RefAnnotation ref for DataModel from quoted type annotations")
+	}
+
+	// Verify the raw negative-control string does NOT produce a DataModel annotation ref.
+	// The only source of DataModel annotation refs should be the type annotations.
+	annotLines := map[int]bool{}
+	for _, r := range result.Refs {
+		if r.Name == "DataModel" && r.Kind == RefAnnotation {
+			annotLines[r.StartLine] = true
+			t.Logf("  annotation ref: DataModel at line %d col %d", r.StartLine, r.StartCol)
+		}
+	}
+	// The plain string assignment is on line 27; that line must not produce an annotation ref.
+	if annotLines[27] {
+		t.Error("line 27 (plain string assignment) should not produce an annotation ref for DataModel")
+	}
+}
+
+// TestPythonQuotedAnnotation_Positions verifies column positions are correct
+// for identifiers found inside quoted type strings.
+func TestPythonQuotedAnnotation_Positions(t *testing.T) {
+	if err := VerifyLanguages([]string{"python"}); err != nil {
+		t.Skip("Python parser not available:", err)
+	}
+
+	extractor, err := NewExtractor("python")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer extractor.Close()
+
+	// Line 1 (1-indexed): def foo() -> "MyClass": pass
+	// "MyClass" starts at col 14 (0-indexed): `def foo() -> "` = 14 chars, then M at 14.
+	source := []byte(`def foo() -> "MyClass": pass
+`)
+
+	result, err := extractor.Extract("pos_test.py", source)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	found := false
+	for _, r := range result.Refs {
+		if r.Name == "MyClass" && r.Kind == RefAnnotation {
+			found = true
+			// "def foo() -> \"" = 14 chars, so MyClass col should be 14
+			if r.StartCol != 14 {
+				t.Errorf("expected MyClass at col 14, got col %d", r.StartCol)
+			}
+			if r.StartLine != 1 {
+				t.Errorf("expected MyClass at line 1, got line %d", r.StartLine)
+			}
+		}
+	}
+	if !found {
+		t.Error("expected MyClass annotation ref; not found")
+	}
+}
+
+// RefAnnotation is a helper alias so extractor_test can reference it without
+// importing the symbols package directly (it's already in scope via extractor.go).
+const RefAnnotation = 7 // symbols.RefAnnotation
