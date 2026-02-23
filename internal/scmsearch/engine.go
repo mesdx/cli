@@ -317,10 +317,7 @@ func (e *Engine) searchFile(
 	relPath, _ := filepath.Rel(e.RepoRoot, filePath)
 	var matches []Match
 
-	for {
-		if ctx.Err() != nil {
-			break
-		}
+	for ctx.Err() == nil {
 		if len(matches) >= req.MaxMatchesPerFile {
 			break
 		}
